@@ -107,11 +107,14 @@ fn main() {
             helpers::use_vertex_objects(&vao1, &vbo1);
             let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
             let green_value: f32 = (time_value.sin() / 2.0) + 0.5;
+            let x_offset: f32 = time_value.sin();
             shader_program_1.use_program();
             shader_program_1.set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
+            shader_program_1.set_1f("offset_x", x_offset);
             glDrawArrays(GL_TRIANGLES, 0, 3);
             helpers::use_vertex_objects(&vao2, &vbo2);
             shader_program_2.use_program();
+            shader_program_1.set_1f("offset_x", x_offset);
             glDrawArrays(GL_TRIANGLES, 0, 3);
         }
         win.swap_window();

@@ -223,6 +223,10 @@ impl ShaderProgram {
         let vertex_color_location = self.get_uniform_location(name);
         unsafe { glUniform1i(vertex_color_location, value) }
     }
+    pub fn set_1f(&self, name: &str, value: f32) {
+        let vertex_color_location = self.get_uniform_location(name);
+        unsafe { glUniform1f(vertex_color_location, value) }
+    }
     pub fn set_4f(&self, name: &str, value: [f32; 4]) {
         let vertex_color_location = self.get_uniform_location(name);
         unsafe {

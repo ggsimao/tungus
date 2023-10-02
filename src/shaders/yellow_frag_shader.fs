@@ -1,9 +1,7 @@
 #version 330 core
-in vec3 vertexColor;
+in vec3 vertexColor, vertexPosition;
 out vec4 fragColor;
 
-// uniform vec4 ourColor = vec4(0.0, 0.0, 0.0, 1.0); // input variable from vs (same name and type)
-
 void main() {
-    fragColor = vec4(vertexColor, 1.0);
+    fragColor = vec4(vertexPosition, 1.0);
 }

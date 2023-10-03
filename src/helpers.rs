@@ -23,6 +23,8 @@ impl Vertex {
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
 
+pub type TextureCoord = [f32; 2];
+
 /// Sets the color to clear to when clearing the screen.
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
     unsafe { glClearColor(r, g, b, a) }

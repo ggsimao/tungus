@@ -3,10 +3,10 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::zero_ptr)]
 
-const WINDOW_TITLE: &str = "Triangle: Elements";
+const WINDOW_TITLE: &str = "Tungus";
 
 use crate::helpers::{
-    Buffer, BufferType, PolygonMode, Vertex, VertexArray, VertexColor, VertexPos,
+    Buffer, BufferType, PolygonMode, TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
 };
 use crate::shaders::{Shader, ShaderProgram, ShaderType};
 use beryllium::*;
@@ -15,7 +15,6 @@ use core::{
     mem::{size_of, size_of_val},
     ptr::null,
 };
-// use learn_opengl as learn;
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
@@ -24,7 +23,9 @@ use gl33::global_loader::*;
 pub mod helpers;
 pub mod shaders;
 
-type TriIndexes = [u32; 3];
+const INDEX_DIMENSIONS: usize = 3;
+
+type TriangleIndexes = [u32; INDEX_DIMENSIONS];
 
 const VERTICES: [Vertex; 5] = [
     Vertex::new([0.25, 0.5, 0.0], [1.0, 0.0, 0.0]),
@@ -34,7 +35,7 @@ const VERTICES: [Vertex; 5] = [
     Vertex::new([0.5, -0.5, 0.0], [0.0, 0.0, 1.0]),
 ];
 
-const INDICES: [TriIndexes; 2] = [[0, 1, 4], [1, 2, 3]];
+const INDICES: [TriangleIndexes; 2] = [[0, 1, 4], [1, 2, 3]];
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
 
@@ -64,16 +65,32 @@ fn main() {
         let fun =
             |x: *const u8| win.get_proc_address(x as *const i8) as *const std::os::raw::c_void;
         load_global_gl(&fun);
-        // |f_name| win.get_proc_address(f_name)
     }
 
     helpers::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    // println!("{:?}", &[VERTICES[0][0], VERTICES[1][0], VERTICES[4][0]]);
-    // println!("{:?}", &[VERTICES[1][0], VERTICES[2][0], VERTICES[3][0]]);
+    let mut triangles: Vec<Vec<Vertex>> = vec![];
+    for indices in INDICES {
+        let mut triangle = vec![];
+        for index in indices {
+            triangle.push(VERTICES[index as usize]);
+        }
+        triangles.push(triangle);
+    }
 
-    let (vao1, vbo1) = helpers::initialize_vertex_objects(&[VERTICES[0], VERTICES[1], VERTICES[4]]);
-    let (vao2, vbo2) = helpers::initialize_vertex_objects(&[VERTICES[1], VERTICES[2], VERTICES[3]]);
+    struct VertexObjects {
+        vao: VertexArray,
+        vbo: Buffer,
+    }
+    fn new_vertex_objects(vao: VertexArray, vbo: Buffer) -> VertexObjects {
+        VertexObjects { vao: vao, vbo: vbo }
+    }
+
+    let mut all_vertex_objects: Vec<VertexObjects> = vec![];
+    for triangle in triangles {
+        let returned_objects = helpers::initialize_vertex_objects(&triangle);
+        all_vertex_objects.push(new_vertex_objects(returned_objects.0, returned_objects.1));
+    }
 
     // let ebo = Buffer::new().expect("Couldn't make the element buffer.");
     // ebo.bind(BufferType::ElementArray);
@@ -83,9 +100,13 @@ fn main() {
     //     GL_STATIC_DRAW,
     // );
 
+    let mut all_shader_programs: Vec<ShaderProgram> = vec![];
+
     let shader_program_1: ShaderProgram =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_ORANGE).unwrap();
     let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_YELLOW).unwrap();
+    all_shader_programs.push(shader_program_1);
+    all_shader_programs.push(shader_program_2);
 
     helpers::polygon_mode(PolygonMode::Fill);
 
@@ -104,18 +125,18 @@ fn main() {
         // and then draw!
         unsafe {
             glClear(GL_COLOR_BUFFER_BIT);
-            helpers::use_vertex_objects(&vao1, &vbo1);
-            let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
-            let green_value: f32 = (time_value.sin() / 2.0) + 0.5;
-            let x_offset: f32 = time_value.sin();
-            shader_program_1.use_program();
-            shader_program_1.set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
-            shader_program_1.set_1f("offset_x", x_offset);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            helpers::use_vertex_objects(&vao2, &vbo2);
-            shader_program_2.use_program();
-            shader_program_1.set_1f("offset_x", x_offset);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            for (i, vertex_objects) in all_vertex_objects.iter().enumerate() {
+                helpers::use_vertex_objects(&vertex_objects.vao, &vertex_objects.vbo);
+                all_shader_programs[i].use_program();
+                let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
+                let x_offset: f32 = time_value.sin();
+                if i == 0 {
+                    let green_value: f32 = (time_value.sin() / 2.0) + 0.5;
+                    all_shader_programs[i].set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
+                }
+                all_shader_programs[i].set_1f("offset_x", x_offset);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+            }
         }
         win.swap_window();
     }

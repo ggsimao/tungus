@@ -9,21 +9,25 @@ use gl33::global_loader::*;
 
 pub type VertexPos = [f32; 3];
 pub type VertexColor = [f32; 3];
+pub type TextureCoord = [f32; 3]; // For some reason the size needs to be 3 instead of 2
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vertex {
     pub pos: VertexPos,
     pub color: VertexColor,
+    pub texture: TextureCoord,
 }
 impl Vertex {
-    pub const fn new(pos: VertexPos, color: VertexColor) -> Self {
-        Self { pos, color }
+    pub const fn new(pos: VertexPos, color: VertexColor, texture: [f32; 2]) -> Self {
+        Self {
+            pos,
+            color,
+            texture: [texture[0], texture[1], 0.0],
+        }
     }
 }
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
-
-pub type TextureCoord = [f32; 2];
 
 /// Sets the color to clear to when clearing the screen.
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
@@ -47,12 +51,12 @@ impl VertexArray {
 
     /// Bind this vertex array as the current vertex array object
     pub fn bind(&self) {
-        unsafe { glBindVertexArray(self.0) }
+        glBindVertexArray(self.0)
     }
 
     /// Clear the current vertex array object binding.
     pub fn clear_binding() {
-        unsafe { glBindVertexArray(0) }
+        glBindVertexArray(0)
     }
 }
 
@@ -158,6 +162,15 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             core::mem::size_of::<VertexPos>() as *const _,
         );
         glEnableVertexAttribArray(1);
+        glVertexAttribPointer(
+            2,
+            2,
+            GL_FLOAT,
+            GL_FALSE.0 as u8,
+            core::mem::size_of::<Vertex>().try_into().unwrap(),
+            (core::mem::size_of::<VertexPos>() + core::mem::size_of::<VertexColor>()) as *const _,
+        );
+        glEnableVertexAttribArray(2);
     }
 }
 

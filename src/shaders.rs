@@ -19,7 +19,7 @@ impl Shader {
     /// Possibly skip the direct creation of the shader object and use
     /// [`ShaderProgram::from_vert_frag`](ShaderProgram::from_vert_frag).
     pub fn new(ty: ShaderType) -> Option<Self> {
-        let shader = unsafe { glCreateShader(GLenum(ty as u32)) };
+        let shader = glCreateShader(GLenum(ty as u32));
         if shader != 0 {
             Some(Self(shader))
         } else {
@@ -43,7 +43,7 @@ impl Shader {
 
     /// Compiles the shader based on the current source.
     pub fn compile(&self) {
-        unsafe { glCompileShader(self.0) };
+        glCompileShader(self.0);
     }
 
     /// Checks if the last compile was successful or not.
@@ -79,7 +79,7 @@ impl Shader {
     /// deletion. If the shader has been previously attached to a program then the
     /// shader will stay allocated until it's unattached from that program.
     pub fn delete(self) {
-        unsafe { glDeleteShader(self.0) };
+        glDeleteShader(self.0);
     }
 
     /// Takes a shader type and source string and produces either the compiled
@@ -123,7 +123,7 @@ impl ShaderProgram {
     /// it makes a complete program from the vertex and fragment sources all at
     /// once.
     pub fn new() -> Option<Self> {
-        let prog = unsafe { glCreateProgram() };
+        let prog = glCreateProgram();
         if prog != 0 {
             Some(Self(prog))
         } else {
@@ -133,12 +133,12 @@ impl ShaderProgram {
 
     /// Attaches a shader object to this program object.
     pub fn attach_shader(&self, shader: &Shader) {
-        unsafe { glAttachShader(self.0, shader.0) };
+        glAttachShader(self.0, shader.0);
     }
 
     /// Links the various attached, compiled shader objects into a usable program.
     pub fn link_program(&self) {
-        unsafe { glLinkProgram(self.0) };
+        glLinkProgram(self.0);
     }
 
     /// Checks if the last linking operation was successful.
@@ -170,7 +170,7 @@ impl ShaderProgram {
 
     /// Sets the program as the program to use when drawing.
     pub fn use_program(&self) {
-        unsafe { glUseProgram(self.0) };
+        glUseProgram(self.0);
     }
 
     /// Marks the program for deletion.
@@ -179,7 +179,7 @@ impl ShaderProgram {
     /// currently in use it won't be deleted until it's not the active program.
     /// When a program is finally deleted and attached shaders are unattached.
     pub fn delete(self) {
-        unsafe { glDeleteProgram(self.0) };
+        glDeleteProgram(self.0);
     }
 
     /// Takes a vertex shader source string and a fragment shader source string

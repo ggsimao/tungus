@@ -6,28 +6,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-
-pub type VertexPos = [f32; 3];
-pub type VertexColor = [f32; 3];
-pub type TextureCoord = [f32; 3]; // For some reason the size needs to be 3 instead of 2
-
-#[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    pub pos: VertexPos,
-    pub color: VertexColor,
-    pub texture: TextureCoord,
-}
-impl Vertex {
-    pub const fn new(pos: VertexPos, color: VertexColor, texture: [f32; 2]) -> Self {
-        Self {
-            pos,
-            color,
-            texture: [texture[0], texture[1], 0.0],
-        }
-    }
-}
-unsafe impl Zeroable for Vertex {}
-unsafe impl Pod for Vertex {}
+use nalgebra_glm::*;
 
 /// Sets the color to clear to when clearing the screen.
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
@@ -149,7 +128,7 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             3,
             GL_FLOAT,
             GL_FALSE.0 as u8,
-            core::mem::size_of::<Vertex>().try_into().unwrap(),
+            core::mem::size_of::<[Vec3; 3]>().try_into().unwrap(),
             0 as *const _,
         );
         glEnableVertexAttribArray(0);
@@ -158,8 +137,8 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             3,
             GL_FLOAT,
             GL_FALSE.0 as u8,
-            core::mem::size_of::<Vertex>().try_into().unwrap(),
-            core::mem::size_of::<VertexPos>() as *const _,
+            core::mem::size_of::<[Vec3; 3]>().try_into().unwrap(),
+            core::mem::size_of::<[Vec3; 1]>() as *const _,
         );
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(
@@ -167,8 +146,8 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             2,
             GL_FLOAT,
             GL_FALSE.0 as u8,
-            core::mem::size_of::<Vertex>().try_into().unwrap(),
-            (core::mem::size_of::<VertexPos>() + core::mem::size_of::<VertexColor>()) as *const _,
+            core::mem::size_of::<[Vec3; 3]>().try_into().unwrap(),
+            core::mem::size_of::<[Vec3; 2]>() as *const _,
         );
         glEnableVertexAttribArray(2);
     }

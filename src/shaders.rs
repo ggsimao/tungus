@@ -239,4 +239,8 @@ impl ShaderProgram {
             )
         }
     }
+    pub fn set_matrix_4fv(&self, name: &str, value: *const f32) {
+        let vertex_color_location = self.get_uniform_location(name);
+        unsafe { glUniformMatrix4fv(vertex_color_location, 1, 0, value) }
+    }
 }

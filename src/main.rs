@@ -6,7 +6,10 @@
 const WINDOW_TITLE: &str = "Tungus";
 
 use crate::helpers::{
-    Buffer, BufferType, PolygonMode, TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
+    Buffer,
+    BufferType,
+    PolygonMode,
+    VertexArray, //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
 };
 use crate::shaders::{Shader, ShaderProgram, ShaderType};
 use crate::textures::Texture;
@@ -20,7 +23,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use std::cmp::min;
+use nalgebra_glm::*;
 use std::path::Path;
 
 pub mod helpers;
@@ -30,18 +33,6 @@ pub mod textures;
 const INDEX_DIMENSIONS: usize = 3;
 
 type TriangleIndexes = [u32; INDEX_DIMENSIONS];
-
-const VERTICES: [Vertex; 9] = [
-    Vertex::new([0.33, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 0.501]),
-    Vertex::new([0.0, -0.66, 0.0], [0.0, 1.0, 0.0], [0.499, 0.499]),
-    Vertex::new([0.66, -0.66, 0.0], [0.0, 0.0, 1.0], [0.501, 0.499]),
-    Vertex::new([0.0, -0.66, 0.0], [0.0, 1.0, 0.0], [2.99, 1.99]),
-    Vertex::new([-0.66, -0.66, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0]),
-    Vertex::new([-0.33, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 2.0]),
-    Vertex::new([0.33, 0.0, 0.0], [1.0, 0.0, 0.0], [3.0, 2.0]),
-    Vertex::new([-0.33, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 2.0]),
-    Vertex::new([0.0, 0.66, 0.0], [0.0, 0.0, 0.0], [1.5, 0.0]),
-];
 
 const INDICES: [TriangleIndexes; 3] = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
 
@@ -66,7 +57,7 @@ fn main() {
             WINDOW_TITLE,
             WindowPosition::Centered,
             800,
-            600,
+            800,
             WindowFlags::Shown,
         )
         .expect("couldn't make a window and context");
@@ -78,13 +69,66 @@ fn main() {
         load_global_gl(&fun);
     }
 
+    let all_vertices: [[Vec3; 3]; 9] = [
+        [
+            vec3(0.33, 0.0, 0.0),
+            vec3(1.0, 0.0, 0.0),
+            vec3(0.5, 0.501, 0.0),
+        ],
+        [
+            vec3(0.0, -0.66, 0.0),
+            vec3(0.0, 2.0, 0.0),
+            vec3(0.499, 0.499, 0.0),
+        ],
+        [
+            vec3(0.66, -0.66, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.501, 0.499, 0.0),
+        ],
+        [
+            vec3(0.0, -0.66, 0.0),
+            vec3(0.0, 1.0, 0.0),
+            vec3(2.99, 1.99, 0.0),
+        ],
+        [
+            vec3(-0.66, -0.66, 0.0),
+            vec3(1.0, 0.0, 0.0),
+            vec3(0.0, 0.0, 0.0),
+        ],
+        [
+            vec3(-0.33, 0.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 2.0, 0.0),
+        ],
+        [
+            vec3(0.33, 0.0, 0.0),
+            vec3(1.0, 0.0, 0.0),
+            vec3(3.0, 2.0, 0.0),
+        ],
+        [
+            vec3(-0.33, 0.0, 0.0),
+            vec3(0.0, 0.0, 1.0),
+            vec3(0.0, 2.0, 0.0),
+        ],
+        [
+            vec3(0.0, 0.66, 0.0),
+            vec3(0.0, 0.0, 0.0),
+            vec3(1.5, 0.0, 0.0),
+        ],
+    ];
+
     helpers::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    let mut triangles: Vec<Vec<Vertex>> = vec![];
+    let mut triangles: Vec<Vec<[f32; 9]>> = Vec::new();
     for indices in INDICES {
-        let mut triangle = vec![];
+        let mut triangle = Vec::<[f32; 9]>::new();
         for index in indices {
-            triangle.push(VERTICES[index as usize]);
+            let vertex = all_vertices[index as usize];
+            let mut unwrapped_vertex: Vec<f32> = Vec::new();
+            for component in vertex {
+                unwrapped_vertex = [unwrapped_vertex, component.as_slice().to_vec()].concat();
+            }
+            triangle.push(unwrapped_vertex[..].try_into().unwrap());
         }
         triangles.push(triangle);
     }
@@ -161,10 +205,14 @@ fn main() {
                 helpers::use_vertex_objects(&vertex_objects.vao, &vertex_objects.vbo);
                 all_shader_programs[i].use_program();
                 let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
-                let x_offset: f32 = time_value.sin();
-                let green_value: f32 = (time_value.sin() / 2.0) + 0.5;
-                all_shader_programs[i].set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
-                all_shader_programs[i].set_1f("offset_x", x_offset);
+                let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
+
+                let mut transform = Mat4::identity();
+                transform = rotate(&transform, time_value.into(), &vec3(0.0, 0.0, 1.0));
+                transform = scale(&transform, &vec3(pulse, pulse, pulse));
+
+                // all_shader_programs[i].set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
+                all_shader_programs[i].set_matrix_4fv("transform", transform.as_ptr());
                 all_shader_programs[i].set_1i("ourTexture1", 0);
                 all_shader_programs[i].set_1i("ourTexture2", 1);
                 all_shader_programs[i].set_1f("mixer", mixer as f32);

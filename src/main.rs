@@ -11,6 +11,7 @@ use crate::helpers::{
     PolygonMode,
     VertexArray, //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
 };
+use crate::model::{Triangle, Vertex};
 use crate::shaders::{Shader, ShaderProgram, ShaderType};
 use crate::textures::Texture;
 use beryllium::*;
@@ -27,6 +28,7 @@ use nalgebra_glm::*;
 use std::path::Path;
 
 pub mod helpers;
+pub mod model;
 pub mod shaders;
 pub mod textures;
 
@@ -69,68 +71,54 @@ fn main() {
         load_global_gl(&fun);
     }
 
-    let all_vertices: [[Vec3; 3]; 9] = [
-        [
-            vec3(0.33, 0.0, 0.0),
-            vec3(1.0, 0.0, 0.0),
-            vec3(0.5, 0.501, 0.0),
-        ],
-        [
-            vec3(0.0, -0.66, 0.0),
-            vec3(0.0, 2.0, 0.0),
-            vec3(0.499, 0.499, 0.0),
-        ],
-        [
-            vec3(0.66, -0.66, 0.0),
-            vec3(0.0, 0.0, 1.0),
-            vec3(0.501, 0.499, 0.0),
-        ],
-        [
-            vec3(0.0, -0.66, 0.0),
-            vec3(0.0, 1.0, 0.0),
-            vec3(2.99, 1.99, 0.0),
-        ],
-        [
-            vec3(-0.66, -0.66, 0.0),
-            vec3(1.0, 0.0, 0.0),
-            vec3(0.0, 0.0, 0.0),
-        ],
-        [
-            vec3(-0.33, 0.0, 0.0),
-            vec3(0.0, 0.0, 1.0),
-            vec3(0.0, 2.0, 0.0),
-        ],
-        [
-            vec3(0.33, 0.0, 0.0),
-            vec3(1.0, 0.0, 0.0),
-            vec3(3.0, 2.0, 0.0),
-        ],
-        [
-            vec3(-0.33, 0.0, 0.0),
-            vec3(0.0, 0.0, 1.0),
-            vec3(0.0, 2.0, 0.0),
-        ],
-        [
-            vec3(0.0, 0.66, 0.0),
-            vec3(0.0, 0.0, 0.0),
-            vec3(1.5, 0.0, 0.0),
-        ],
+    let mut all_vertices: [Vertex; 9] = [
+        Vertex::new(0.33, 0.0, 0.0),
+        Vertex::new(0.0, -0.66, 0.0),
+        Vertex::new(0.66, -0.66, 0.0),
+        Vertex::new(0.0, -0.66, 0.0),
+        Vertex::new(-0.66, -0.66, 0.0),
+        Vertex::new(-0.33, 0.0, 0.0),
+        Vertex::new(0.33, 0.0, 0.0),
+        Vertex::new(-0.33, 0.0, 0.0),
+        Vertex::new(0.0, 0.66, 0.0),
     ];
+    let all_colors: [Vec3; 9] = [
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 0.0),
+    ];
+    let all_texcoords: [Vec2; 9] = [
+        vec2(0.5, 0.501),
+        vec2(0.499, 0.499),
+        vec2(0.501, 0.499),
+        vec2(2.99, 1.99),
+        vec2(0.0, 0.0),
+        vec2(0.0, 2.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+    ];
+    for i in 0..all_vertices.len() {
+        all_vertices[i].color_from_vector(all_colors[i]);
+        all_vertices[i].tex_coords_from_vector(all_texcoords[i]);
+    }
 
     helpers::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    let mut triangles: Vec<Vec<[f32; 9]>> = Vec::new();
+    let mut triangles: Vec<Triangle> = Vec::new();
+
     for indices in INDICES {
-        let mut triangle = Vec::<[f32; 9]>::new();
+        let mut vertices: Vec<Vertex> = Vec::new();
         for index in indices {
-            let vertex = all_vertices[index as usize];
-            let mut unwrapped_vertex: Vec<f32> = Vec::new();
-            for component in vertex {
-                unwrapped_vertex = [unwrapped_vertex, component.as_slice().to_vec()].concat();
-            }
-            triangle.push(unwrapped_vertex[..].try_into().unwrap());
+            vertices.push(all_vertices[index as usize]);
         }
-        triangles.push(triangle);
+        triangles.push(Triangle::from_array(vertices[..].try_into().unwrap()));
     }
 
     struct VertexObjects {
@@ -143,7 +131,8 @@ fn main() {
 
     let mut all_vertex_objects: Vec<VertexObjects> = vec![];
     for triangle in triangles {
-        let returned_objects = helpers::initialize_vertex_objects(&triangle);
+        let returned_objects =
+            helpers::initialize_vertex_objects(triangle.make_bufferable_data() as &[u8]);
         all_vertex_objects.push(new_vertex_objects(returned_objects.0, returned_objects.1));
     }
 
@@ -211,8 +200,8 @@ fn main() {
                 transform = rotate(&transform, time_value.into(), &vec3(0.0, 0.0, 1.0));
                 transform = scale(&transform, &vec3(pulse, pulse, pulse));
 
-                // all_shader_programs[i].set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
                 all_shader_programs[i].set_matrix_4fv("transform", transform.as_ptr());
+                all_shader_programs[i].set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
                 all_shader_programs[i].set_1i("ourTexture1", 0);
                 all_shader_programs[i].set_1i("ourTexture2", 1);
                 all_shader_programs[i].set_1f("mixer", mixer as f32);

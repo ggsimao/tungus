@@ -112,11 +112,7 @@ pub fn initialize_vertex_objects(vertices: &[u8]) -> (VertexArray, Buffer) {
 
     let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
     vbo.bind(BufferType::Array);
-    buffer_data(
-        BufferType::Array,
-        vertices, //bytemuck::cast_slice(vertices),
-        GL_STATIC_DRAW,
-    );
+    buffer_data(BufferType::Array, vertices, GL_STATIC_DRAW);
 
     (vao, vbo)
 }

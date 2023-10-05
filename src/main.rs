@@ -6,10 +6,11 @@
 const WINDOW_TITLE: &str = "Tungus";
 
 use crate::helpers::{
+    // , //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
     Buffer,
     BufferType,
     PolygonMode,
-    VertexArray, //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
+    VertexArray,
 };
 use crate::model::{Triangle, Vertex};
 use crate::shaders::{Shader, ShaderProgram, ShaderType};
@@ -36,7 +37,7 @@ const INDEX_DIMENSIONS: usize = 3;
 
 type TriangleIndexes = [u32; INDEX_DIMENSIONS];
 
-const INDICES: [TriangleIndexes; 3] = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
+const INDICES: [TriangleIndexes; 4] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
 const FRAG_SHADER_GREEN: &str = "./src/shaders/green_frag_shader.fs";
@@ -71,18 +72,25 @@ fn main() {
         load_global_gl(&fun);
     }
 
-    let mut all_vertices: [Vertex; 9] = [
-        Vertex::new(0.33, 0.0, 0.0),
-        Vertex::new(0.0, -0.66, 0.0),
-        Vertex::new(0.66, -0.66, 0.0),
-        Vertex::new(0.0, -0.66, 0.0),
-        Vertex::new(-0.66, -0.66, 0.0),
-        Vertex::new(-0.33, 0.0, 0.0),
-        Vertex::new(0.33, 0.0, 0.0),
-        Vertex::new(-0.33, 0.0, 0.0),
-        Vertex::new(0.0, 0.66, 0.0),
+    unsafe {
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    let mut all_vertices: [Vertex; 12] = [
+        Vertex::new(-0.5, -0.5, 0.5),
+        Vertex::new(0.5, -0.5, 0.5),
+        Vertex::new(0.0, -0.5, -0.5),
+        Vertex::new(-0.5, -0.5, 0.5),
+        Vertex::new(0.5, -0.5, 0.5),
+        Vertex::new(0.0, 0.5, 0.0),
+        Vertex::new(-0.5, -0.5, 0.5),
+        Vertex::new(0.0, -0.5, -0.5),
+        Vertex::new(0.0, 0.5, 0.0),
+        Vertex::new(0.5, -0.5, 0.5),
+        Vertex::new(0.0, -0.5, -0.5),
+        Vertex::new(0.0, 0.5, 0.0),
     ];
-    let all_colors: [Vec3; 9] = [
+    let all_colors: [Vec3; 12] = [
         vec3(1.0, 0.0, 0.0),
         vec3(0.0, 1.0, 0.0),
         vec3(0.0, 0.0, 1.0),
@@ -92,14 +100,20 @@ fn main() {
         vec3(1.0, 0.0, 0.0),
         vec3(0.0, 0.0, 1.0),
         vec3(0.0, 0.0, 0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 0.0),
     ];
-    let all_texcoords: [Vec2; 9] = [
-        vec2(0.5, 0.501),
-        vec2(0.499, 0.499),
-        vec2(0.501, 0.499),
-        vec2(2.99, 1.99),
-        vec2(0.0, 0.0),
+    let all_texcoords: [Vec2; 12] = [
+        vec2(3.0, 2.0),
         vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
         vec2(3.0, 2.0),
         vec2(0.0, 2.0),
         vec2(1.5, 0.0),
@@ -156,15 +170,17 @@ fn main() {
     let mut all_shader_programs: Vec<ShaderProgram> = vec![];
 
     let shader_program_1 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_RAINBOW).unwrap();
+    let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
     let shader_program_3 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
+    let shader_program_4 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
     all_shader_programs.push(shader_program_1);
     all_shader_programs.push(shader_program_2);
     all_shader_programs.push(shader_program_3);
+    all_shader_programs.push(shader_program_4);
 
     helpers::polygon_mode(PolygonMode::Fill);
 
-    let mut mixer: f64 = 0.2;
+    let mut mixer: f32 = 0.2;
 
     'main_loop: loop {
         // handle events this frame
@@ -172,8 +188,8 @@ fn main() {
             match event {
                 Event::Quit(_) => break 'main_loop,
                 Event::Keyboard(key_event) => match key_event.key.keycode {
-                    Keycode::UP => mixer = (mixer + 0.02).min(1.0),
-                    Keycode::DOWN => mixer = (mixer - 0.02).max(0.0),
+                    Keycode::UP => mixer = mixer + 2.0,   //(mixer + 0.02).min(1.0),
+                    Keycode::DOWN => mixer = mixer - 2.0, //(mixer - 0.02).max(0.0),
                     _ => (),
                 },
                 _ => (),
@@ -185,7 +201,7 @@ fn main() {
 
         // and then draw!
         unsafe {
-            glClear(GL_COLOR_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             for (i, vertex_objects) in all_vertex_objects.iter().enumerate() {
                 glActiveTexture(GL_TEXTURE0);
                 texture1.bind();
@@ -196,15 +212,19 @@ fn main() {
                 let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
                 let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
-                let mut transform = Mat4::identity();
-                transform = rotate(&transform, time_value.into(), &vec3(0.0, 0.0, 1.0));
-                transform = scale(&transform, &vec3(pulse, pulse, pulse));
+                let mut model = Mat4::identity();
+                model = rotate(&model, radians(&vec1(mixer)).x, &vec3(1.0, 0.0, 0.0));
+                let mut view = Mat4::identity();
+                view = translate(&view, &vec3(0.0, 0.0, -1.5));
+                let projection = perspective(radians(&vec1(45.0)).x, 800.0 / 600.0, 0.1, 100.0);
 
-                all_shader_programs[i].set_matrix_4fv("transform", transform.as_ptr());
+                all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());
+                all_shader_programs[i].set_matrix_4fv("view", view.as_ptr());
+                all_shader_programs[i].set_matrix_4fv("projection", projection.as_ptr());
                 all_shader_programs[i].set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
                 all_shader_programs[i].set_1i("ourTexture1", 0);
                 all_shader_programs[i].set_1i("ourTexture2", 1);
-                all_shader_programs[i].set_1f("mixer", mixer as f32);
+                all_shader_programs[i].set_1f("mixer", 0.2 as f32);
                 glDrawArrays(GL_TRIANGLES, 0, 3);
             }
         }

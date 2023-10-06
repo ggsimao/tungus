@@ -12,7 +12,7 @@ use crate::helpers::{
     PolygonMode,
     VertexArray,
 };
-use crate::model::{Triangle, Vertex};
+use crate::model::{Pyramid, Triangle, Vertex};
 use crate::shaders::{Shader, ShaderProgram, ShaderType};
 use crate::textures::Texture;
 use beryllium::*;
@@ -76,20 +76,7 @@ fn main() {
         glEnable(GL_DEPTH_TEST);
     }
 
-    let mut all_vertices: [Vertex; 12] = [
-        Vertex::new(-0.5, -0.5, 0.5),
-        Vertex::new(0.5, -0.5, 0.5),
-        Vertex::new(0.0, -0.5, -0.5),
-        Vertex::new(-0.5, -0.5, 0.5),
-        Vertex::new(0.5, -0.5, 0.5),
-        Vertex::new(0.0, 0.5, 0.0),
-        Vertex::new(-0.5, -0.5, 0.5),
-        Vertex::new(0.0, -0.5, -0.5),
-        Vertex::new(0.0, 0.5, 0.0),
-        Vertex::new(0.5, -0.5, 0.5),
-        Vertex::new(0.0, -0.5, -0.5),
-        Vertex::new(0.0, 0.5, 0.0),
-    ];
+    let mut pyramid = Pyramid::regular(1.0);
     let all_colors: [Vec3; 12] = [
         vec3(1.0, 0.0, 0.0),
         vec3(0.0, 1.0, 0.0),
@@ -118,22 +105,20 @@ fn main() {
         vec2(0.0, 2.0),
         vec2(1.5, 0.0),
     ];
-    for i in 0..all_vertices.len() {
-        all_vertices[i].color_from_vector(all_colors[i]);
-        all_vertices[i].tex_coords_from_vector(all_texcoords[i]);
-    }
+    pyramid.colors_from_vectors(all_colors);
+    pyramid.tex_coords_from_vectors(all_texcoords);
 
     helpers::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    let mut triangles: Vec<Triangle> = Vec::new();
+    // let mut triangles: Vec<Triangle> = Vec::new();
 
-    for indices in INDICES {
-        let mut vertices: Vec<Vertex> = Vec::new();
-        for index in indices {
-            vertices.push(all_vertices[index as usize]);
-        }
-        triangles.push(Triangle::from_array(vertices[..].try_into().unwrap()));
-    }
+    // for indices in INDICES {
+    //     let mut vertices: Vec<Vertex> = Vec::new();
+    //     for index in indices {
+    //         vertices.push(all_vertices[index as usize]);
+    //     }
+    //     triangles.push(Triangle::from_array(vertices[..].try_into().unwrap()));
+    // }
 
     struct VertexObjects {
         vao: VertexArray,
@@ -144,7 +129,7 @@ fn main() {
     }
 
     let mut all_vertex_objects: Vec<VertexObjects> = vec![];
-    for triangle in triangles {
+    for triangle in pyramid.get_triangles() {
         let returned_objects =
             helpers::initialize_vertex_objects(triangle.make_bufferable_data() as &[u8]);
         all_vertex_objects.push(new_vertex_objects(returned_objects.0, returned_objects.1));
@@ -180,7 +165,7 @@ fn main() {
 
     helpers::polygon_mode(PolygonMode::Fill);
 
-    let mut mixer: f32 = 0.2;
+    let (mut rotate_x, mut rotate_y, mut rotate_z): (f32, f32, f32) = (0.0, 0.0, 0.0);
 
     'main_loop: loop {
         // handle events this frame
@@ -188,8 +173,12 @@ fn main() {
             match event {
                 Event::Quit(_) => break 'main_loop,
                 Event::Keyboard(key_event) => match key_event.key.keycode {
-                    Keycode::UP => mixer = mixer + 2.0,   //(mixer + 0.02).min(1.0),
-                    Keycode::DOWN => mixer = mixer - 2.0, //(mixer - 0.02).max(0.0),
+                    Keycode::UP => rotate_x = rotate_x + 2.0,
+                    Keycode::DOWN => rotate_x = rotate_x - 2.0,
+                    Keycode::LEFT => rotate_y = rotate_y - 2.0,
+                    Keycode::RIGHT => rotate_y = rotate_y + 2.0,
+                    Keycode::KP_0 => rotate_z = rotate_z - 2.0,
+                    Keycode::KP_1 => rotate_z = rotate_z + 2.0,
                     _ => (),
                 },
                 _ => (),
@@ -213,10 +202,12 @@ fn main() {
                 let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
                 let mut model = Mat4::identity();
-                model = rotate(&model, radians(&vec1(mixer)).x, &vec3(1.0, 0.0, 0.0));
+                model = rotate(&model, rotate_x.to_radians(), &vec3(1.0, 0.0, 0.0));
+                model = rotate(&model, rotate_y.to_radians(), &vec3(0.0, 1.0, 0.0));
+                model = rotate(&model, rotate_z.to_radians(), &vec3(0.0, 0.0, 1.0));
                 let mut view = Mat4::identity();
-                view = translate(&view, &vec3(0.0, 0.0, -1.5));
-                let projection = perspective(radians(&vec1(45.0)).x, 800.0 / 600.0, 0.1, 100.0);
+                view = translate(&view, &vec3(0.0, 0.0, -2.0));
+                let projection = perspective(45.0_f32.to_radians(), 1.0, 0.1, 100.0);
 
                 all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());
                 all_shader_programs[i].set_matrix_4fv("view", view.as_ptr());

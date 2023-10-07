@@ -5,11 +5,6 @@
 
 const WINDOW_TITLE: &str = "Tungus";
 
-use crate::helpers::{
-    Buffer, BufferType, PolygonMode, TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
-};
-use crate::shaders::{Shader, ShaderProgram, ShaderType};
-use crate::textures::Texture;
 use beryllium::*;
 use core::{
     convert::{TryFrom, TryInto},
@@ -20,37 +15,38 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use std::cmp::min;
+use helpers::{
+    // , //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
+    Buffer,
+    BufferType,
+    PolygonMode,
+    VertexArray,
+};
+use model::{Pyramid, Triangle, Vertex};
+use nalgebra_glm::*;
+use shaders::{Shader, ShaderProgram, ShaderType};
 use std::path::Path;
+use systems::Camera;
+use textures::Texture;
 
 pub mod helpers;
+pub mod model;
 pub mod shaders;
+pub mod systems;
 pub mod textures;
 
-const INDEX_DIMENSIONS: usize = 3;
+// const INDEX_DIMENSIONS: usize = 3;
 
-type TriangleIndexes = [u32; INDEX_DIMENSIONS];
+// type TriangleIndexes = [u32; INDEX_DIMENSIONS];
 
-const VERTICES: [Vertex; 9] = [
-    Vertex::new([0.33, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, 0.501]),
-    Vertex::new([0.0, -0.66, 0.0], [0.0, 1.0, 0.0], [0.499, 0.499]),
-    Vertex::new([0.66, -0.66, 0.0], [0.0, 0.0, 1.0], [0.501, 0.499]),
-    Vertex::new([0.0, -0.66, 0.0], [0.0, 1.0, 0.0], [2.99, 1.99]),
-    Vertex::new([-0.66, -0.66, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0]),
-    Vertex::new([-0.33, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 2.0]),
-    Vertex::new([0.33, 0.0, 0.0], [1.0, 0.0, 0.0], [3.0, 2.0]),
-    Vertex::new([-0.33, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 2.0]),
-    Vertex::new([0.0, 0.66, 0.0], [0.0, 0.0, 0.0], [1.5, 0.0]),
-];
-
-const INDICES: [TriangleIndexes; 3] = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
+// const INDICES: [TriangleIndexes; 4] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
 const FRAG_SHADER_GREEN: &str = "./src/shaders/green_frag_shader.fs";
 const FRAG_SHADER_RAINBOW: &str = "./src/shaders/rainbow_frag_shader.fs";
 const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 
-// const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
+const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container.jpg";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 
@@ -64,9 +60,9 @@ fn main() {
     let win = sdl
         .create_gl_window(
             WINDOW_TITLE,
-            WindowPosition::Centered,
+            WindowPosition::XY(1000, 100),
             800,
-            600,
+            800,
             WindowFlags::Shown,
         )
         .expect("couldn't make a window and context");
@@ -78,16 +74,55 @@ fn main() {
         load_global_gl(&fun);
     }
 
+    let _ = sdl.set_relative_mouse_mode(true);
+
+    unsafe {
+        glEnable(GL_DEPTH_TEST);
+    }
+
+    let mut pyramid = Pyramid::regular(1.0);
+    let all_colors: [Vec3; 12] = [
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 0.0),
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 0.0),
+    ];
+    let all_texcoords: [Vec2; 12] = [
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+        vec2(3.0, 2.0),
+        vec2(0.0, 2.0),
+        vec2(1.5, 0.0),
+    ];
+    pyramid.colors_from_vectors(all_colors);
+    pyramid.tex_coords_from_vectors(all_texcoords);
+
     helpers::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    let mut triangles: Vec<Vec<Vertex>> = vec![];
-    for indices in INDICES {
-        let mut triangle = vec![];
-        for index in indices {
-            triangle.push(VERTICES[index as usize]);
-        }
-        triangles.push(triangle);
-    }
+    // let mut triangles: Vec<Triangle> = Vec::new();
+
+    // for indices in INDICES {
+    //     let mut vertices: Vec<Vertex> = Vec::new();
+    //     for index in indices {
+    //         vertices.push(all_vertices[index as usize]);
+    //     }
+    //     triangles.push(Triangle::from_array(vertices[..].try_into().unwrap()));
+    // }
 
     struct VertexObjects {
         vao: VertexArray,
@@ -98,8 +133,9 @@ fn main() {
     }
 
     let mut all_vertex_objects: Vec<VertexObjects> = vec![];
-    for triangle in triangles {
-        let returned_objects = helpers::initialize_vertex_objects(&triangle);
+    for triangle in pyramid.get_triangles() {
+        let returned_objects =
+            helpers::initialize_vertex_objects(triangle.make_bufferable_data() as &[u8]);
         all_vertex_objects.push(new_vertex_objects(returned_objects.0, returned_objects.1));
     }
 
@@ -123,36 +159,79 @@ fn main() {
     let mut all_shader_programs: Vec<ShaderProgram> = vec![];
 
     let shader_program_1 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_RAINBOW).unwrap();
+    let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
     let shader_program_3 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
+    let shader_program_4 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
     all_shader_programs.push(shader_program_1);
     all_shader_programs.push(shader_program_2);
     all_shader_programs.push(shader_program_3);
+    all_shader_programs.push(shader_program_4);
 
     helpers::polygon_mode(PolygonMode::Fill);
 
-    let mut mixer: f64 = 0.2;
+    let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
+    let (mut elapsed_time, mut previous_time): (u32, u32);
+    let (mut translate_speed, mut rotation_speed, mut zoom_speed, mut walk_speed): (
+        f32,
+        f32,
+        f32,
+        f32,
+    );
+    let mut translation_delta = Vec3::zeros();
+    let mut walk_delta: f32 = 0.0;
+
+    elapsed_time = 0;
+
+    // TODO: exercícios 10.10
 
     'main_loop: loop {
         // handle events this frame
-        while let Some(event) = sdl.poll_events().and_then(Result::ok) {
+        previous_time = elapsed_time;
+        elapsed_time = sdl.get_ticks();
+        translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
+        walk_speed = (elapsed_time - previous_time) as f32 * 0.002;
+        rotation_speed = (elapsed_time - previous_time) as f32 * 0.01;
+        zoom_speed = (elapsed_time - previous_time) as f32 * 0.1;
+
+        'event_polling: while let Some(event) = sdl.poll_events().and_then(Result::ok) {
             match event {
                 Event::Quit(_) => break 'main_loop,
-                Event::Keyboard(key_event) => match key_event.key.keycode {
-                    Keycode::UP => mixer = (mixer + 0.02).min(1.0),
-                    Keycode::DOWN => mixer = (mixer - 0.02).max(0.0),
-                    _ => (),
-                },
+                Event::Keyboard(key_event) => {
+                    let pressed_value = key_event.is_pressed as i32 as f32;
+                    match key_event.key.keycode {
+                        Keycode::ESCAPE => break 'main_loop,
+                        Keycode::A => translation_delta.x = translate_speed * -pressed_value,
+                        Keycode::D => translation_delta.x = translate_speed * pressed_value,
+                        Keycode::SPACE => translation_delta.y = translate_speed * -pressed_value,
+                        Keycode::LCTRL => translation_delta.y = translate_speed * pressed_value,
+                        Keycode::S => walk_delta = walk_speed * pressed_value,
+                        Keycode::W => walk_delta = walk_speed * -pressed_value,
+                        _ => (),
+                    }
+                    break 'event_polling;
+                }
+                Event::MouseMotion(motion_event) => {
+                    main_camera.rotate(vec3(
+                        -motion_event.y_delta as f32 * rotation_speed,
+                        motion_event.x_delta as f32 * rotation_speed,
+                        0.0,
+                    ));
+                }
+                Event::MouseWheel(wheel_event) => {
+                    main_camera.change_fov(wheel_event.y_delta as f32 * zoom_speed);
+                }
                 _ => (),
             }
         }
+        main_camera.translate(translation_delta);
+        main_camera.translate_forward(walk_delta);
         // now the events are clear.
 
         // here's where we could change the world state if we had some.
 
         // and then draw!
         unsafe {
-            glClear(GL_COLOR_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             for (i, vertex_objects) in all_vertex_objects.iter().enumerate() {
                 glActiveTexture(GL_TEXTURE0);
                 texture1.bind();
@@ -161,13 +240,19 @@ fn main() {
                 helpers::use_vertex_objects(&vertex_objects.vao, &vertex_objects.vbo);
                 all_shader_programs[i].use_program();
                 let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
-                let x_offset: f32 = time_value.sin();
-                let green_value: f32 = (time_value.sin() / 2.0) + 0.5;
-                all_shader_programs[i].set_4f("ourColor", [0.0, green_value, 0.0, 1.0]);
-                all_shader_programs[i].set_1f("offset_x", x_offset);
+                let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
+
+                let model = Mat4::identity();
+                let view = main_camera.look_at();
+                let projection = perspective(main_camera.get_fov(), 1.0, 0.1, 100.0);
+
+                all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());
+                all_shader_programs[i].set_matrix_4fv("view", view.as_ptr());
+                all_shader_programs[i].set_matrix_4fv("projection", projection.as_ptr());
+                all_shader_programs[i].set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
                 all_shader_programs[i].set_1i("ourTexture1", 0);
                 all_shader_programs[i].set_1i("ourTexture2", 1);
-                all_shader_programs[i].set_1f("mixer", mixer as f32);
+                all_shader_programs[i].set_1f("mixer", 0.2 as f32);
                 glDrawArrays(GL_TRIANGLES, 0, 3);
             }
         }

@@ -6,28 +6,9 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
+use nalgebra_glm::*;
 
-pub type VertexPos = [f32; 3];
-pub type VertexColor = [f32; 3];
-pub type TextureCoord = [f32; 3]; // For some reason the size needs to be 3 instead of 2
-
-#[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    pub pos: VertexPos,
-    pub color: VertexColor,
-    pub texture: TextureCoord,
-}
-impl Vertex {
-    pub const fn new(pos: VertexPos, color: VertexColor, texture: [f32; 2]) -> Self {
-        Self {
-            pos,
-            color,
-            texture: [texture[0], texture[1], 0.0],
-        }
-    }
-}
-unsafe impl Zeroable for Vertex {}
-unsafe impl Pod for Vertex {}
+use crate::model::Vertex;
 
 /// Sets the color to clear to when clearing the screen.
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
@@ -125,17 +106,13 @@ pub fn polygon_mode(mode: PolygonMode) {
     unsafe { glPolygonMode(GL_FRONT_AND_BACK, GLenum(mode as u32)) };
 }
 
-pub fn initialize_vertex_objects<A: NoUninit>(vertices: &[A]) -> (VertexArray, Buffer) {
+pub fn initialize_vertex_objects(vertices: &[u8]) -> (VertexArray, Buffer) {
     let vao = VertexArray::new().expect("Couldn't make a VAO");
     vao.bind();
 
     let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
     vbo.bind(BufferType::Array);
-    buffer_data(
-        BufferType::Array,
-        bytemuck::cast_slice(vertices),
-        GL_STATIC_DRAW,
-    );
+    buffer_data(BufferType::Array, vertices, GL_STATIC_DRAW);
 
     (vao, vbo)
 }
@@ -159,7 +136,7 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             GL_FLOAT,
             GL_FALSE.0 as u8,
             core::mem::size_of::<Vertex>().try_into().unwrap(),
-            core::mem::size_of::<VertexPos>() as *const _,
+            core::mem::size_of::<Vec3>() as *const _,
         );
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(
@@ -168,7 +145,7 @@ pub fn use_vertex_objects(vao: &VertexArray, vbo: &Buffer) {
             GL_FLOAT,
             GL_FALSE.0 as u8,
             core::mem::size_of::<Vertex>().try_into().unwrap(),
-            (core::mem::size_of::<VertexPos>() + core::mem::size_of::<VertexColor>()) as *const _,
+            (core::mem::size_of::<Vec3>() * 2) as *const _,
         );
         glEnableVertexAttribArray(2);
     }

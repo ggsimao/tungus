@@ -12,6 +12,7 @@ imagine = "0.0.5"
 gl33 = { version = "0.2.0" }
 glfw = "0.53.0"
 stb_image = "0.2.5"
+nalgebra-glm = "0.18.0"
 
 [dev-dependencies]
 beryllium = "0.2.0-alpha.4"

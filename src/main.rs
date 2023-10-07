@@ -171,8 +171,14 @@ fn main() {
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
     let (mut elapsed_time, mut previous_time): (u32, u32);
-    let (mut translate_speed, mut rotation_speed, mut zoom_speed): (f32, f32, f32);
+    let (mut translate_speed, mut rotation_speed, mut zoom_speed, mut walk_speed): (
+        f32,
+        f32,
+        f32,
+        f32,
+    );
     let mut translation_delta = Vec3::zeros();
+    let mut walk_delta: f32 = 0.0;
 
     elapsed_time = 0;
 
@@ -183,6 +189,7 @@ fn main() {
         previous_time = elapsed_time;
         elapsed_time = sdl.get_ticks();
         translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
+        walk_speed = (elapsed_time - previous_time) as f32 * 0.002;
         rotation_speed = (elapsed_time - previous_time) as f32 * 0.01;
         zoom_speed = (elapsed_time - previous_time) as f32 * 0.1;
 
@@ -197,8 +204,8 @@ fn main() {
                         Keycode::D => translation_delta.x = translate_speed * pressed_value,
                         Keycode::SPACE => translation_delta.y = translate_speed * -pressed_value,
                         Keycode::LCTRL => translation_delta.y = translate_speed * pressed_value,
-                        Keycode::S => translation_delta.z = translate_speed * pressed_value,
-                        Keycode::W => translation_delta.z = translate_speed * -pressed_value,
+                        Keycode::S => walk_delta = walk_speed * pressed_value,
+                        Keycode::W => walk_delta = walk_speed * -pressed_value,
                         _ => (),
                     }
                     break 'event_polling;
@@ -217,6 +224,7 @@ fn main() {
             }
         }
         main_camera.translate(translation_delta);
+        main_camera.translate_forward(walk_delta);
         // now the events are clear.
 
         // here's where we could change the world state if we had some.

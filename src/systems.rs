@@ -60,6 +60,13 @@ impl Camera {
     pub fn translate_frontal(&mut self, offset: f32) {
         self.translate(vec3(0.0, 0.0, offset));
     }
+    pub fn translate_forward(&mut self, offset: f32) {
+        let mut direction = Vec3::zeros();
+        direction.x = self.yaw.cos();
+        direction.z = self.yaw.sin();
+        direction *= offset;
+        self.pos -= direction;
+    }
 
     pub fn rotate(&mut self, euler_angles: Vec3) {
         self.pitch = (self.pitch + euler_angles.x.to_radians())

@@ -5,16 +5,6 @@
 
 const WINDOW_TITLE: &str = "Tungus";
 
-use crate::helpers::{
-    // , //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
-    Buffer,
-    BufferType,
-    PolygonMode,
-    VertexArray,
-};
-use crate::model::{Pyramid, Triangle, Vertex};
-use crate::shaders::{Shader, ShaderProgram, ShaderType};
-use crate::textures::Texture;
 use beryllium::*;
 use core::{
     convert::{TryFrom, TryInto},
@@ -25,12 +15,24 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
+use helpers::{
+    // , //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
+    Buffer,
+    BufferType,
+    PolygonMode,
+    VertexArray,
+};
+use model::{Pyramid, Triangle, Vertex};
 use nalgebra_glm::*;
+use shaders::{Shader, ShaderProgram, ShaderType};
 use std::path::Path;
+use systems::Camera;
+use textures::Texture;
 
 pub mod helpers;
 pub mod model;
 pub mod shaders;
+pub mod systems;
 pub mod textures;
 
 const INDEX_DIMENSIONS: usize = 3;
@@ -165,20 +167,33 @@ fn main() {
 
     helpers::polygon_mode(PolygonMode::Fill);
 
-    let (mut rotate_x, mut rotate_y, mut rotate_z): (f32, f32, f32) = (0.0, 0.0, 0.0);
+    let mut main_camera = Camera::new(vec3(-2.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
+    let (mut elapsed_time, mut previous_time): (u32, u32) = (0, 0);
+    let (mut translate_speed, mut rotation_speed): (f32, f32);
 
     'main_loop: loop {
         // handle events this frame
+        previous_time = elapsed_time;
+        elapsed_time = sdl.get_ticks();
+        translate_speed = (elapsed_time - previous_time) as f32 * 0.003;
+        rotation_speed = (elapsed_time - previous_time) as f32 * 0.1;
+
         while let Some(event) = sdl.poll_events().and_then(Result::ok) {
             match event {
                 Event::Quit(_) => break 'main_loop,
                 Event::Keyboard(key_event) => match key_event.key.keycode {
-                    Keycode::UP => rotate_x = rotate_x + 2.0,
-                    Keycode::DOWN => rotate_x = rotate_x - 2.0,
-                    Keycode::LEFT => rotate_y = rotate_y - 2.0,
-                    Keycode::RIGHT => rotate_y = rotate_y + 2.0,
-                    Keycode::KP_0 => rotate_z = rotate_z - 2.0,
-                    Keycode::KP_1 => rotate_z = rotate_z + 2.0,
+                    Keycode::UP => main_camera.rotate_pitch(rotation_speed),
+                    Keycode::DOWN => main_camera.rotate_pitch(-rotation_speed),
+                    Keycode::LEFT => main_camera.rotate_yaw(-rotation_speed),
+                    Keycode::RIGHT => main_camera.rotate_yaw(rotation_speed),
+                    Keycode::KP_0 => main_camera.rotate_roll(-rotation_speed),
+                    Keycode::KP_1 => main_camera.rotate_roll(rotation_speed),
+                    Keycode::A => main_camera.translate_longitudinal(-translate_speed),
+                    Keycode::D => main_camera.translate_longitudinal(translate_speed),
+                    Keycode::SPACE => main_camera.translate_axial(translate_speed),
+                    Keycode::X => main_camera.translate_axial(-translate_speed),
+                    Keycode::S => main_camera.translate_frontal(translate_speed),
+                    Keycode::W => main_camera.translate_frontal(-translate_speed),
                     _ => (),
                 },
                 _ => (),
@@ -202,11 +217,7 @@ fn main() {
                 let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
                 let mut model = Mat4::identity();
-                model = rotate(&model, rotate_x.to_radians(), &vec3(1.0, 0.0, 0.0));
-                model = rotate(&model, rotate_y.to_radians(), &vec3(0.0, 1.0, 0.0));
-                model = rotate(&model, rotate_z.to_radians(), &vec3(0.0, 0.0, 1.0));
-                let mut view = Mat4::identity();
-                view = translate(&view, &vec3(0.0, 0.0, -2.0));
+                let mut view = main_camera.look_at();
                 let projection = perspective(45.0_f32.to_radians(), 1.0, 0.1, 100.0);
 
                 all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());

@@ -28,8 +28,7 @@ impl Vertex {
         self.pos = self.pos + vec3(offset_x, offset_y, offset_z);
     }
     pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
-        let mut matrix = Mat4::identity();
-        matrix = rotate(&matrix, angle, axis);
+        let matrix = rotation(angle, axis);
         self.pos = vec4_to_vec3(&(matrix * vec3_to_vec4(&self.pos)));
     }
 

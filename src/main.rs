@@ -35,18 +35,18 @@ pub mod shaders;
 pub mod systems;
 pub mod textures;
 
-const INDEX_DIMENSIONS: usize = 3;
+// const INDEX_DIMENSIONS: usize = 3;
 
-type TriangleIndexes = [u32; INDEX_DIMENSIONS];
+// type TriangleIndexes = [u32; INDEX_DIMENSIONS];
 
-const INDICES: [TriangleIndexes; 4] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
+// const INDICES: [TriangleIndexes; 4] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
 const FRAG_SHADER_GREEN: &str = "./src/shaders/green_frag_shader.fs";
 const FRAG_SHADER_RAINBOW: &str = "./src/shaders/rainbow_frag_shader.fs";
 const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 
-// const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
+const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container.jpg";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 
@@ -73,6 +73,8 @@ fn main() {
             |x: *const u8| win.get_proc_address(x as *const i8) as *const std::os::raw::c_void;
         load_global_gl(&fun);
     }
+
+    let _ = sdl.set_relative_mouse_mode(true);
 
     unsafe {
         glEnable(GL_DEPTH_TEST);
@@ -168,37 +170,47 @@ fn main() {
     helpers::polygon_mode(PolygonMode::Fill);
 
     let mut main_camera = Camera::new(vec3(-2.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
-    let (mut elapsed_time, mut previous_time): (u32, u32) = (0, 0);
+    let (mut elapsed_time, mut previous_time): (u32, u32);
     let (mut translate_speed, mut rotation_speed): (f32, f32);
+    let mut translation_delta = Vec3::zeros();
+
+    elapsed_time = 0;
 
     'main_loop: loop {
         // handle events this frame
         previous_time = elapsed_time;
         elapsed_time = sdl.get_ticks();
-        translate_speed = (elapsed_time - previous_time) as f32 * 0.003;
-        rotation_speed = (elapsed_time - previous_time) as f32 * 0.1;
+        translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
+        rotation_speed = (elapsed_time - previous_time) as f32 * 0.01;
 
-        while let Some(event) = sdl.poll_events().and_then(Result::ok) {
+        'event_polling: while let Some(event) = sdl.poll_events().and_then(Result::ok) {
             match event {
                 Event::Quit(_) => break 'main_loop,
-                Event::Keyboard(key_event) => match key_event.key.keycode {
-                    Keycode::UP => main_camera.rotate_pitch(rotation_speed),
-                    Keycode::DOWN => main_camera.rotate_pitch(-rotation_speed),
-                    Keycode::LEFT => main_camera.rotate_yaw(-rotation_speed),
-                    Keycode::RIGHT => main_camera.rotate_yaw(rotation_speed),
-                    Keycode::KP_0 => main_camera.rotate_roll(-rotation_speed),
-                    Keycode::KP_1 => main_camera.rotate_roll(rotation_speed),
-                    Keycode::A => main_camera.translate_longitudinal(-translate_speed),
-                    Keycode::D => main_camera.translate_longitudinal(translate_speed),
-                    Keycode::SPACE => main_camera.translate_axial(translate_speed),
-                    Keycode::X => main_camera.translate_axial(-translate_speed),
-                    Keycode::S => main_camera.translate_frontal(translate_speed),
-                    Keycode::W => main_camera.translate_frontal(-translate_speed),
-                    _ => (),
-                },
+                Event::Keyboard(key_event) => {
+                    let pressed_value = key_event.is_pressed as i32 as f32;
+                    match key_event.key.keycode {
+                        Keycode::ESCAPE => break 'main_loop,
+                        Keycode::A => translation_delta.x = translate_speed * -pressed_value,
+                        Keycode::D => translation_delta.x = translate_speed * pressed_value,
+                        Keycode::SPACE => translation_delta.y = translate_speed * pressed_value,
+                        Keycode::LCTRL => translation_delta.y = translate_speed * -pressed_value,
+                        Keycode::S => translation_delta.z = translate_speed * pressed_value,
+                        Keycode::W => translation_delta.z = translate_speed * -pressed_value,
+                        _ => (),
+                    }
+                    break 'event_polling;
+                }
+                Event::MouseMotion(motion_event) => {
+                    main_camera.rotate(vec3(
+                        -motion_event.y_delta as f32 * rotation_speed,
+                        motion_event.x_delta as f32 * rotation_speed,
+                        0.0,
+                    ));
+                }
                 _ => (),
             }
         }
+        main_camera.translate(translation_delta);
         // now the events are clear.
 
         // here's where we could change the world state if we had some.
@@ -216,8 +228,8 @@ fn main() {
                 let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
                 let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
-                let mut model = Mat4::identity();
-                let mut view = main_camera.look_at();
+                let model = Mat4::identity();
+                let view = main_camera.look_at();
                 let projection = perspective(45.0_f32.to_radians(), 1.0, 0.1, 100.0);
 
                 all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());

@@ -60,7 +60,7 @@ fn main() {
     let win = sdl
         .create_gl_window(
             WINDOW_TITLE,
-            WindowPosition::Centered,
+            WindowPosition::XY(1000, 100),
             800,
             800,
             WindowFlags::Shown,
@@ -169,12 +169,14 @@ fn main() {
 
     helpers::polygon_mode(PolygonMode::Fill);
 
-    let mut main_camera = Camera::new(vec3(-2.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0));
+    let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
     let (mut elapsed_time, mut previous_time): (u32, u32);
-    let (mut translate_speed, mut rotation_speed): (f32, f32);
+    let (mut translate_speed, mut rotation_speed, mut zoom_speed): (f32, f32, f32);
     let mut translation_delta = Vec3::zeros();
 
     elapsed_time = 0;
+
+    // TODO: exercícios 10.10
 
     'main_loop: loop {
         // handle events this frame
@@ -182,6 +184,7 @@ fn main() {
         elapsed_time = sdl.get_ticks();
         translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
         rotation_speed = (elapsed_time - previous_time) as f32 * 0.01;
+        zoom_speed = (elapsed_time - previous_time) as f32 * 0.1;
 
         'event_polling: while let Some(event) = sdl.poll_events().and_then(Result::ok) {
             match event {
@@ -192,8 +195,8 @@ fn main() {
                         Keycode::ESCAPE => break 'main_loop,
                         Keycode::A => translation_delta.x = translate_speed * -pressed_value,
                         Keycode::D => translation_delta.x = translate_speed * pressed_value,
-                        Keycode::SPACE => translation_delta.y = translate_speed * pressed_value,
-                        Keycode::LCTRL => translation_delta.y = translate_speed * -pressed_value,
+                        Keycode::SPACE => translation_delta.y = translate_speed * -pressed_value,
+                        Keycode::LCTRL => translation_delta.y = translate_speed * pressed_value,
                         Keycode::S => translation_delta.z = translate_speed * pressed_value,
                         Keycode::W => translation_delta.z = translate_speed * -pressed_value,
                         _ => (),
@@ -206,6 +209,9 @@ fn main() {
                         motion_event.x_delta as f32 * rotation_speed,
                         0.0,
                     ));
+                }
+                Event::MouseWheel(wheel_event) => {
+                    main_camera.change_fov(wheel_event.y_delta as f32 * zoom_speed);
                 }
                 _ => (),
             }
@@ -230,7 +236,7 @@ fn main() {
 
                 let model = Mat4::identity();
                 let view = main_camera.look_at();
-                let projection = perspective(45.0_f32.to_radians(), 1.0, 0.1, 100.0);
+                let projection = perspective(main_camera.get_fov(), 1.0, 0.1, 100.0);
 
                 all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());
                 all_shader_programs[i].set_matrix_4fv("view", view.as_ptr());

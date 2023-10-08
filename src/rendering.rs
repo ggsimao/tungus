@@ -324,10 +324,7 @@ pub struct HexahedronDrawer {
 
 impl HexahedronDrawer {
     pub fn new(hexahedron: Hexahedron) -> Self {
-        let indices = [
-            0, 1, 2, 1, 2, 3, 0, 1, 4, 1, 4, 5, 0, 2, 6, 0, 4, 6, 1, 3, 7, 1, 5, 7, 2, 3, 6, 3, 6,
-            7, 4, 5, 6, 5, 6, 7,
-        ];
+        let indices = hexahedron.get_indices();
         let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
         vbo.bind(BufferType::Array);
         buffer_data(

@@ -239,4 +239,8 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniformMatrix4fv(location, 1, 0, value) }
     }
+    pub fn set_matrix_3fv(&self, name: &str, value: *const f32) {
+        let location = self.get_uniform_location(name);
+        unsafe { glUniformMatrix3fv(location, 1, 0, value) }
+    }
 }

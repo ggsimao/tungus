@@ -96,4 +96,8 @@ impl Camera {
     pub fn get_fov(&self) -> f32 {
         self.fov
     }
+
+    pub fn get_pos(&self) -> Vec3 {
+        self.pos
+    }
 }

@@ -107,7 +107,7 @@ fn main() {
     // texture2.set_wrapping(GL_REPEAT);
     // texture2.set_filters(GL_NEAREST, GL_NEAREST);
 
-    let lamp = Hexahedron::cube(1.0);
+    let lamp = Hexahedron::cube(0.5);
     let lamp_drawer = HexahedronDrawer::new(lamp);
 
     let shader_program_pyramid =
@@ -184,6 +184,7 @@ fn main() {
         let pyramid_model = Mat4::identity();
         let pyramid_view = main_camera.look_at();
         let projection = perspective(1.0, main_camera.get_fov(), 0.1, 100.0);
+        let normal = mat4_to_mat3(&pyramid_model.try_inverse().unwrap().transpose());
 
         // shader_program_pyramid.set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
         // shader_program_pyramid.set_1i("ourTexture1", 0);
@@ -193,16 +194,25 @@ fn main() {
         shader_program_pyramid.set_matrix_4fv("model", pyramid_model.as_ptr());
         shader_program_pyramid.set_matrix_4fv("view", pyramid_view.as_ptr());
         shader_program_pyramid.set_matrix_4fv("projection", projection.as_ptr());
+        shader_program_pyramid.set_matrix_3fv("normalMatrix", normal.as_ptr());
+        shader_program_pyramid.set_3f("material.ambient", [1.0, 0.5, 0.31]);
+        shader_program_pyramid.set_3f("material.diffuse", [1.0, 0.5, 0.31]);
+        shader_program_pyramid.set_3f("material.specular", [0.5, 0.5, 0.5]);
+        shader_program_pyramid.set_1f("material.shininess", 32.0);
         shader_program_pyramid.set_3f("objectColor", [1.0, 0.5, 0.31]);
         shader_program_pyramid.set_3f("lightColor", [1.0, 1.0, 1.0]);
-        shader_program_pyramid.set_3f("lightPos", [0.0, 1.0, 0.0]);
+        shader_program_pyramid.set_3f("light.position", [0.0, 0.7, 0.0]);
+        shader_program_pyramid.set_3f("light.ambient", [0.2, 0.2, 0.2]);
+        shader_program_pyramid.set_3f("light.diffuse", [0.5, 0.9, 0.5]);
+        shader_program_pyramid.set_3f("light.specular", [1.0, 1.0, 1.0]);
+        shader_program_pyramid.set_3f("viewPos", main_camera.get_pos().into());
 
         object_vao.bind();
         pyramid_drawer.ready_buffers();
         pyramid_drawer.draw();
 
-        let lamp_scale = scaling(&vec3(0.25, 0.25, 0.25));
-        let lamp_trans = translation(&vec3(0.0, 1.0, 0.0));
+        let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
+        let lamp_trans = translation(&vec3(0.0, 0.7, 0.0));
         let lamp_model = lamp_trans * lamp_scale;
         let lamp_view = main_camera.look_at();
 

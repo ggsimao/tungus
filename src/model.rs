@@ -190,22 +190,50 @@ pub struct Polygon {
 
 pub struct Hexahedron {
     vertices: [Vertex; 8],
+    indices: [u32; 36],
 }
 
 impl Hexahedron {
     pub fn cube(side: f32) -> Self {
-        Hexahedron {
-            vertices: [
-                Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
-                Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
-                Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
-                Vertex::new(side / 2.0, side / 2.0, side / 2.0),
-                Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
-                Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
-                Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
-                Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-            ],
+        let mut vertices = [
+            Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
+            Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
+            Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
+            Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
+        ];
+        let indices: [u32; 36] = [
+            0, 2, 1, 1, 2, 3, 0, 1, 4, 4, 1, 5, 2, 0, 6, 6, 0, 4, 3, 7, 1, 1, 7, 5, 2, 6, 3, 3, 6,
+            7, 7, 6, 5, 5, 6, 4,
+        ];
+        let mut normals = [Vec3::zeros(); 8];
+
+        for i in 0..6 {
+            let main_vertex = vertices[indices[i * 6] as usize];
+            let v1 = vertices[indices[i * 6 + 1] as usize];
+            let v2 = vertices[indices[i * 6 + 2] as usize];
+            let normal = normalize(&cross(
+                &(v1.get_pos() - main_vertex.get_pos()),
+                &(v2.get_pos() - main_vertex.get_pos()),
+            ));
+            normals[indices[i * 6] as usize] += normal;
+            normals[indices[i * 6 + 1] as usize] += normal;
+            normals[indices[i * 6 + 2] as usize] += normal;
+
+            let opposite_vertex = vertices[indices[i * 6 + 5] as usize];
+            let normal = normalize(&cross(
+                &(v2.get_pos() - opposite_vertex.get_pos()),
+                &(v1.get_pos() - opposite_vertex.get_pos()),
+            ));
+            normals[indices[i * 6 + 5] as usize] += normal;
         }
+        for i in 0..8 {
+            vertices[i].set_normal(normals[i] / 4.0);
+        }
+        Hexahedron { vertices, indices }
     }
 
     pub fn translate(&mut self, offset_x: f32, offset_y: f32, offset_z: f32) {
@@ -233,6 +261,9 @@ impl Hexahedron {
 
     pub fn get_vertices(&self) -> &[Vertex; 8] {
         &self.vertices
+    }
+    pub fn get_indices(&self) -> [u32; 36] {
+        self.indices
     }
 }
 

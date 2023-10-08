@@ -7,6 +7,7 @@ layout (location = 3) in vec2 aTexCoord;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform mat3 normalMatrix;
 
 out vec3 fragPos;
 out vec3 normal;
@@ -15,5 +16,5 @@ void main() {
     gl_Position = vec4(aPos, 1.0);
     gl_Position = projection * view * model * gl_Position;
     fragPos = vec3(model * vec4(aPos, 1.0));
-    normal = aNormal;
+    normal = normalMatrix * aNormal;
 }

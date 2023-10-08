@@ -210,37 +210,33 @@ impl ShaderProgram {
     fn get_uniform_location(&self, name: &str) -> i32 {
         unsafe {
             let uniform_name = CString::new(name.as_bytes()).unwrap().into_raw() as *const u8;
-            let vertex_color_location: i32 = glGetUniformLocation(self.0, uniform_name);
-            vertex_color_location
+            let location: i32 = glGetUniformLocation(self.0, uniform_name);
+            location
         }
     }
 
     pub fn set_1b(&self, name: &str, value: bool) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1i(vertex_color_location, value.into()) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1i(location, value.into()) }
     }
     pub fn set_1i(&self, name: &str, value: i32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1i(vertex_color_location, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1i(location, value) }
     }
     pub fn set_1f(&self, name: &str, value: f32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1f(vertex_color_location, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1f(location, value) }
     }
     pub fn set_4f(&self, name: &str, value: [f32; 4]) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe {
-            glUniform4f(
-                vertex_color_location,
-                value[0],
-                value[1],
-                value[2],
-                value[3],
-            )
-        }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform4f(location, value[0], value[1], value[2], value[3]) }
+    }
+    pub fn set_3f(&self, name: &str, value: [f32; 3]) {
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform3f(location, value[0], value[1], value[2]) }
     }
     pub fn set_matrix_4fv(&self, name: &str, value: *const f32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniformMatrix4fv(vertex_color_location, 1, 0, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniformMatrix4fv(location, 1, 0, value) }
     }
 }

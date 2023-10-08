@@ -15,36 +15,28 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use helpers::{
-    // , //TextureCoord, Vertex, VertexArray, VertexColor, VertexPos,
-    Buffer,
-    BufferType,
-    PolygonMode,
-    VertexArray,
-};
-use model::{Pyramid, Triangle, Vertex};
+use model::{Hexahedron, Triangle, TriangularPyramid, Vertex};
 use nalgebra_glm::*;
+use rendering::{
+    Buffer, BufferType, Draw, HexahedronDrawer, PolygonMode, TriangularPyramidDrawer, VertexArray,
+};
 use shaders::{Shader, ShaderProgram, ShaderType};
-use std::path::Path;
+use std::{ffi::c_void, path::Path};
 use systems::Camera;
 use textures::Texture;
 
 pub mod helpers;
 pub mod model;
+pub mod rendering;
 pub mod shaders;
 pub mod systems;
 pub mod textures;
 
-// const INDEX_DIMENSIONS: usize = 3;
-
-// type TriangleIndexes = [u32; INDEX_DIMENSIONS];
-
-// const INDICES: [TriangleIndexes; 4] = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]];
-
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
-const FRAG_SHADER_GREEN: &str = "./src/shaders/green_frag_shader.fs";
+const FRAG_SHADER_COLOR: &str = "./src/shaders/color_frag_shader.fs";
 const FRAG_SHADER_RAINBOW: &str = "./src/shaders/rainbow_frag_shader.fs";
 const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
+const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container.jpg";
@@ -80,94 +72,50 @@ fn main() {
         glEnable(GL_DEPTH_TEST);
     }
 
-    let mut pyramid = Pyramid::regular(1.0);
-    let all_colors: [Vec3; 12] = [
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(0.0, 1.0, 0.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(0.0, 0.0, 0.0),
-        vec3(1.0, 0.0, 0.0),
-        vec3(0.0, 0.0, 1.0),
-        vec3(0.0, 0.0, 0.0),
-    ];
-    let all_texcoords: [Vec2; 12] = [
-        vec2(3.0, 2.0),
-        vec2(0.0, 2.0),
-        vec2(1.5, 0.0),
-        vec2(3.0, 2.0),
-        vec2(0.0, 2.0),
-        vec2(1.5, 0.0),
-        vec2(3.0, 2.0),
-        vec2(0.0, 2.0),
-        vec2(1.5, 0.0),
-        vec2(3.0, 2.0),
-        vec2(0.0, 2.0),
-        vec2(1.5, 0.0),
-    ];
-    pyramid.colors_from_vectors(all_colors);
-    pyramid.tex_coords_from_vectors(all_texcoords);
+    let pyramid = TriangularPyramid::regular(1.0);
+    // let all_colors: [Vec3; 4] = [
+    //     vec3(1.0, 0.0, 0.0),
+    //     vec3(0.0, 1.0, 0.0),
+    //     vec3(0.0, 0.0, 1.0),
+    //     vec3(0.0, 0.0, 0.0),
+    // ];
+    // let all_texcoords: [Vec2; 4] = [
+    //     vec2(1.5, 0.0),
+    //     vec2(3.0, 2.0),
+    //     vec2(0.0, 2.0),
+    //     vec2(1.5, 0.0),
+    // ];
+    // pyramid.colors_from_vectors(all_colors);
+    // pyramid.tex_coords_from_vectors(all_texcoords);
 
-    helpers::clear_color(0.2, 0.3, 0.3, 1.0);
+    let pyramid_drawer = TriangularPyramidDrawer::new(pyramid);
 
-    // let mut triangles: Vec<Triangle> = Vec::new();
+    rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    // for indices in INDICES {
-    //     let mut vertices: Vec<Vertex> = Vec::new();
-    //     for index in indices {
-    //         vertices.push(all_vertices[index as usize]);
-    //     }
-    //     triangles.push(Triangle::from_array(vertices[..].try_into().unwrap()));
-    // }
+    let object_vao = VertexArray::new().expect("Couldn't make a VAO");
+    // object_vao.bind();
 
-    struct VertexObjects {
-        vao: VertexArray,
-        vbo: Buffer,
-    }
-    fn new_vertex_objects(vao: VertexArray, vbo: Buffer) -> VertexObjects {
-        VertexObjects { vao: vao, vbo: vbo }
-    }
+    let lamp_vao = VertexArray::new().expect("Couldn't make a VAO");
+    // lamp_vao.bind();
 
-    let mut all_vertex_objects: Vec<VertexObjects> = vec![];
-    for triangle in pyramid.get_triangles() {
-        let returned_objects =
-            helpers::initialize_vertex_objects(triangle.make_bufferable_data() as &[u8]);
-        all_vertex_objects.push(new_vertex_objects(returned_objects.0, returned_objects.1));
-    }
+    // let mut texture1 = Texture::new();
+    // texture1.load(Path::new(CONTAINER_TEXTURE));
+    // texture1.set_wrapping(GL_REPEAT);
+    // texture1.set_filters(GL_NEAREST, GL_NEAREST);
+    // let mut texture2 = Texture::new();
+    // texture2.load(Path::new(FACE_TEXTURE));
+    // texture2.set_wrapping(GL_REPEAT);
+    // texture2.set_filters(GL_NEAREST, GL_NEAREST);
 
-    let mut texture1 = Texture::new();
-    texture1.load(Path::new(CONTAINER_TEXTURE));
-    texture1.set_wrapping(GL_REPEAT);
-    texture1.set_filters(GL_NEAREST, GL_NEAREST);
-    let mut texture2 = Texture::new();
-    texture2.load(Path::new(FACE_TEXTURE));
-    texture2.set_wrapping(GL_REPEAT);
-    texture2.set_filters(GL_NEAREST, GL_NEAREST);
+    let lamp = Hexahedron::cube(1.0);
+    let lamp_drawer = HexahedronDrawer::new(lamp);
 
-    // let ebo = Buffer::new().expect("Couldn't make the element buffer.");
-    // ebo.bind(BufferType::ElementArray);
-    // learn::buffer_data(
-    //     BufferType::ElementArray,
-    //     bytemuck::cast_slice(&INDICES[0]),
-    //     GL_STATIC_DRAW,
-    // );
+    let shader_program_pyramid =
+        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_COLOR).unwrap();
+    let shader_program_lamp =
+        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
 
-    let mut all_shader_programs: Vec<ShaderProgram> = vec![];
-
-    let shader_program_1 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    let shader_program_2 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    let shader_program_3 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    let shader_program_4 = ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_TEXTURE).unwrap();
-    all_shader_programs.push(shader_program_1);
-    all_shader_programs.push(shader_program_2);
-    all_shader_programs.push(shader_program_3);
-    all_shader_programs.push(shader_program_4);
-
-    helpers::polygon_mode(PolygonMode::Fill);
+    rendering::polygon_mode(PolygonMode::Fill);
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
     let (mut elapsed_time, mut previous_time): (u32, u32);
@@ -182,10 +130,7 @@ fn main() {
 
     elapsed_time = 0;
 
-    // TODO: exercícios 10.10
-
     'main_loop: loop {
-        // handle events this frame
         previous_time = elapsed_time;
         elapsed_time = sdl.get_ticks();
         translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
@@ -225,37 +170,51 @@ fn main() {
         }
         main_camera.translate(translation_delta);
         main_camera.translate_forward(walk_delta);
-        // now the events are clear.
 
-        // here's where we could change the world state if we had some.
-
-        // and then draw!
         unsafe {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            for (i, vertex_objects) in all_vertex_objects.iter().enumerate() {
-                glActiveTexture(GL_TEXTURE0);
-                texture1.bind();
-                glActiveTexture(GL_TEXTURE1);
-                texture2.bind();
-                helpers::use_vertex_objects(&vertex_objects.vao, &vertex_objects.vbo);
-                all_shader_programs[i].use_program();
-                let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
-                let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
-
-                let model = Mat4::identity();
-                let view = main_camera.look_at();
-                let projection = perspective(main_camera.get_fov(), 1.0, 0.1, 100.0);
-
-                all_shader_programs[i].set_matrix_4fv("model", model.as_ptr());
-                all_shader_programs[i].set_matrix_4fv("view", view.as_ptr());
-                all_shader_programs[i].set_matrix_4fv("projection", projection.as_ptr());
-                all_shader_programs[i].set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
-                all_shader_programs[i].set_1i("ourTexture1", 0);
-                all_shader_programs[i].set_1i("ourTexture2", 1);
-                all_shader_programs[i].set_1f("mixer", 0.2 as f32);
-                glDrawArrays(GL_TRIANGLES, 0, 3);
-            }
         }
+        // glActiveTexture(GL_TEXTURE0);
+        // texture1.bind();
+        // glActiveTexture(GL_TEXTURE1);
+        // texture2.bind();
+        // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
+        // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
+
+        let pyramid_model = Mat4::identity();
+        let pyramid_view = main_camera.look_at();
+        let projection = perspective(1.0, main_camera.get_fov(), 0.1, 100.0);
+
+        // shader_program_pyramid.set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
+        // shader_program_pyramid.set_1i("ourTexture1", 0);
+        // shader_program_pyramid.set_1i("ourTexture2", 1);
+        // shader_program_pyramid.set_1f("mixer", 0.2 as f32);
+        shader_program_pyramid.use_program();
+        shader_program_pyramid.set_matrix_4fv("model", pyramid_model.as_ptr());
+        shader_program_pyramid.set_matrix_4fv("view", pyramid_view.as_ptr());
+        shader_program_pyramid.set_matrix_4fv("projection", projection.as_ptr());
+        shader_program_pyramid.set_3f("objectColor", [1.0, 0.5, 0.31]);
+        shader_program_pyramid.set_3f("lightColor", [1.0, 1.0, 1.0]);
+        shader_program_pyramid.set_3f("lightPos", [0.0, 1.0, 0.0]);
+
+        object_vao.bind();
+        pyramid_drawer.ready_buffers();
+        pyramid_drawer.draw();
+
+        let lamp_scale = scaling(&vec3(0.25, 0.25, 0.25));
+        let lamp_trans = translation(&vec3(0.0, 1.0, 0.0));
+        let lamp_model = lamp_trans * lamp_scale;
+        let lamp_view = main_camera.look_at();
+
+        shader_program_lamp.use_program();
+        shader_program_lamp.set_matrix_4fv("model", lamp_model.as_ptr());
+        shader_program_lamp.set_matrix_4fv("view", lamp_view.as_ptr());
+        shader_program_lamp.set_matrix_4fv("projection", projection.as_ptr());
+
+        lamp_vao.bind();
+        lamp_drawer.ready_buffers();
+        lamp_drawer.draw();
+
         win.swap_window();
     }
 }

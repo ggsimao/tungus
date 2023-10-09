@@ -8,9 +8,7 @@ use std::ffi::CString;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-pub struct Texture {
-    pub id: u32,
-}
+pub struct Texture(pub u32);
 
 impl Texture {
     pub fn new() -> Self {
@@ -18,7 +16,7 @@ impl Texture {
         unsafe {
             glGenTextures(1, &mut texture);
         }
-        Self { id: texture }
+        Self(texture)
     }
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
@@ -29,7 +27,7 @@ impl Texture {
             GL_RGB
         };
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.id);
+            glBindTexture(GL_TEXTURE_2D, self.0);
             stbi_set_flip_vertically_on_load(1);
             let data = stbi_load(
                 path_string.as_ptr(),
@@ -56,7 +54,7 @@ impl Texture {
 
     pub fn bind(&self) {
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.id);
+            glBindTexture(GL_TEXTURE_2D, self.0);
         }
     }
 

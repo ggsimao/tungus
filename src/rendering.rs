@@ -126,7 +126,7 @@ pub trait Draw {
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(
                 3,
-                2,
+                3,
                 GL_FLOAT,
                 GL_FALSE.0 as u8,
                 core::mem::size_of::<Vertex>().try_into().unwrap(),
@@ -347,6 +347,10 @@ impl HexahedronDrawer {
             ebo,
             indices,
         }
+    }
+
+    pub fn get_hexahedron(&self) -> &Hexahedron {
+        &self.hexahedron
     }
 }
 

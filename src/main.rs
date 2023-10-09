@@ -39,7 +39,8 @@ const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
-const CONTAINER_TEXTURE: &str = "./src/resources/textures/container.jpg";
+const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
+const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.png";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 
 fn main() {
@@ -72,23 +73,28 @@ fn main() {
         glEnable(GL_DEPTH_TEST);
     }
 
-    let pyramid = TriangularPyramid::regular(1.0);
+    let mut cube = Hexahedron::cube(1.0);
     // let all_colors: [Vec3; 4] = [
     //     vec3(1.0, 0.0, 0.0),
     //     vec3(0.0, 1.0, 0.0),
     //     vec3(0.0, 0.0, 1.0),
     //     vec3(0.0, 0.0, 0.0),
     // ];
-    // let all_texcoords: [Vec2; 4] = [
-    //     vec2(1.5, 0.0),
-    //     vec2(3.0, 2.0),
-    //     vec2(0.0, 2.0),
-    //     vec2(1.5, 0.0),
-    // ];
-    // pyramid.colors_from_vectors(all_colors);
-    // pyramid.tex_coords_from_vectors(all_texcoords);
+    let all_texcoords: [Vec2; 8] = [
+        vec2(1.0, 0.0),
+        vec2(0.0, 0.0),
+        vec2(1.0, 1.0),
+        vec2(0.0, 1.0),
+        vec2(1.0, 1.0),
+        vec2(0.0, 1.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, 0.0),
+    ];
+    // cube.colors_from_vectors(all_colors);
+    cube.tex_coords_from_vectors(all_texcoords);
 
-    let pyramid_drawer = TriangularPyramidDrawer::new(pyramid);
+    let cube_drawer = HexahedronDrawer::new(cube);
+    // println!("{:?}", cube_drawer.get_hexahedron().get_vertices());
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
@@ -98,19 +104,20 @@ fn main() {
     let lamp_vao = VertexArray::new().expect("Couldn't make a VAO");
     // lamp_vao.bind();
 
-    // let mut texture1 = Texture::new();
-    // texture1.load(Path::new(CONTAINER_TEXTURE));
-    // texture1.set_wrapping(GL_REPEAT);
-    // texture1.set_filters(GL_NEAREST, GL_NEAREST);
-    // let mut texture2 = Texture::new();
-    // texture2.load(Path::new(FACE_TEXTURE));
-    // texture2.set_wrapping(GL_REPEAT);
-    // texture2.set_filters(GL_NEAREST, GL_NEAREST);
+    let mut texture1 = Texture::new();
+    texture1.load(Path::new(CONTAINER_TEXTURE));
+    texture1.set_wrapping(GL_REPEAT);
+    texture1.set_filters(GL_NEAREST, GL_NEAREST);
+    let mut texture2 = Texture::new();
+    texture2.load(Path::new(CONTAINER_SPECULAR));
+    texture2.set_wrapping(GL_REPEAT);
+    texture2.set_filters(GL_NEAREST, GL_NEAREST);
 
     let lamp = Hexahedron::cube(0.5);
     let lamp_drawer = HexahedronDrawer::new(lamp);
+    let lamp_pos = vec3(0.5, 1.0, 0.5);
 
-    let shader_program_pyramid =
+    let shader_program_cube =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_COLOR).unwrap();
     let shader_program_lamp =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
@@ -174,45 +181,51 @@ fn main() {
         unsafe {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         }
-        // glActiveTexture(GL_TEXTURE0);
-        // texture1.bind();
         // glActiveTexture(GL_TEXTURE1);
         // texture2.bind();
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
         // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
-        let pyramid_model = Mat4::identity();
-        let pyramid_view = main_camera.look_at();
+        let cube_model = Mat4::identity();
+        let cube_view = main_camera.look_at();
         let projection = perspective(1.0, main_camera.get_fov(), 0.1, 100.0);
-        let normal = mat4_to_mat3(&pyramid_model.try_inverse().unwrap().transpose());
+        let normal = mat4_to_mat3(&cube_model.try_inverse().unwrap().transpose());
 
-        // shader_program_pyramid.set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
-        // shader_program_pyramid.set_1i("ourTexture1", 0);
-        // shader_program_pyramid.set_1i("ourTexture2", 1);
-        // shader_program_pyramid.set_1f("mixer", 0.2 as f32);
-        shader_program_pyramid.use_program();
-        shader_program_pyramid.set_matrix_4fv("model", pyramid_model.as_ptr());
-        shader_program_pyramid.set_matrix_4fv("view", pyramid_view.as_ptr());
-        shader_program_pyramid.set_matrix_4fv("projection", projection.as_ptr());
-        shader_program_pyramid.set_matrix_3fv("normalMatrix", normal.as_ptr());
-        shader_program_pyramid.set_3f("material.ambient", [1.0, 0.5, 0.31]);
-        shader_program_pyramid.set_3f("material.diffuse", [1.0, 0.5, 0.31]);
-        shader_program_pyramid.set_3f("material.specular", [0.5, 0.5, 0.5]);
-        shader_program_pyramid.set_1f("material.shininess", 32.0);
-        shader_program_pyramid.set_3f("objectColor", [1.0, 0.5, 0.31]);
-        shader_program_pyramid.set_3f("lightColor", [1.0, 1.0, 1.0]);
-        shader_program_pyramid.set_3f("light.position", [0.0, 0.7, 0.0]);
-        shader_program_pyramid.set_3f("light.ambient", [0.2, 0.2, 0.2]);
-        shader_program_pyramid.set_3f("light.diffuse", [0.5, 0.9, 0.5]);
-        shader_program_pyramid.set_3f("light.specular", [1.0, 1.0, 1.0]);
-        shader_program_pyramid.set_3f("viewPos", main_camera.get_pos().into());
+        // shader_program_cube.set_4f("ourColor", [0.0, pulse, 0.0, 1.0]);
+        // shader_program_cube.set_1i("ourTexture1", 0);
+        // shader_program_cube.set_1i("ourTexture2", 1);
+        // shader_program_cube.set_1f("mixer", 0.2 as f32);
+        shader_program_cube.use_program();
+        shader_program_cube.set_matrix_4fv("model", cube_model.as_ptr());
+        shader_program_cube.set_matrix_4fv("view", cube_view.as_ptr());
+        shader_program_cube.set_matrix_4fv("projection", projection.as_ptr());
+        shader_program_cube.set_matrix_3fv("normalMatrix", normal.as_ptr());
+        shader_program_cube.set_1i("material.diffuse", texture1.0 as i32 - 1);
+        unsafe {
+            glActiveTexture(GL_TEXTURE0);
+        }
+        texture1.bind();
+        shader_program_cube.set_1i("material.specular", texture2.0 as i32 - 1);
+        shader_program_cube.set_1f("material.shininess", 128.0);
+        shader_program_cube.set_3f("objectColor", [1.0, 1.0, 1.0]);
+        shader_program_cube.set_3f("lightColor", [1.0, 1.0, 1.0]);
+        shader_program_cube.set_3f("light.position", [lamp_pos.x, lamp_pos.y, lamp_pos.z]);
+        shader_program_cube.set_3f("light.ambient", [0.2, 0.2, 0.2]);
+        shader_program_cube.set_3f("light.diffuse", [1.0, 1.0, 1.0]);
+        shader_program_cube.set_3f("light.specular", [1.0, 1.0, 1.0]);
+        shader_program_cube.set_3f("viewPos", main_camera.get_pos().into());
+        unsafe {
+            glActiveTexture(GL_TEXTURE1);
+        }
+        texture2.bind();
+        // println!("{}", texture1.0);
 
         object_vao.bind();
-        pyramid_drawer.ready_buffers();
-        pyramid_drawer.draw();
+        cube_drawer.ready_buffers();
+        cube_drawer.draw();
 
         let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
-        let lamp_trans = translation(&vec3(0.0, 0.7, 0.0));
+        let lamp_trans = translation(&lamp_pos);
         let lamp_model = lamp_trans * lamp_scale;
         let lamp_view = main_camera.look_at();
 

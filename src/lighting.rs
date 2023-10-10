@@ -1,29 +1,40 @@
 use nalgebra_glm::*;
 
 pub struct DirectionalLight {
-    pub angle: Vec3,
+    pub dir: Vec3,
+    pub amb: Vec3,
+    pub diff: Vec3,
+    pub spec: Vec3,
 }
 
 impl DirectionalLight {
-    pub fn new(angle: Vec3) -> Self {
-        DirectionalLight { angle }
+    pub fn new(dir: Vec3, amb: Vec3, diff: Vec3, spec: Vec3) -> Self {
+        DirectionalLight {
+            dir,
+            amb,
+            diff,
+            spec,
+        }
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct PointLight {
     pub pos: Vec3,
-    pub cons: f32,
-    pub lin: f32,
-    pub quad: f32,
+    pub amb: Vec3,
+    pub diff: Vec3,
+    pub spec: Vec3,
+    pub att: Vec3,
 }
 
 impl PointLight {
-    pub fn new(pos: Vec3, cons: f32, lin: f32, quad: f32) -> Self {
+    pub fn new(pos: Vec3, amb: Vec3, diff: Vec3, spec: Vec3, att: Vec3) -> Self {
         PointLight {
             pos,
-            cons,
-            lin,
-            quad,
+            amb,
+            diff,
+            spec,
+            att,
         }
     }
 }
@@ -33,15 +44,32 @@ impl PointLight {
 pub struct Spotlight {
     pub pos: Vec3,
     pub dir: Vec3,
+    pub amb: Vec3,
+    pub diff: Vec3,
+    pub spec: Vec3,
+    pub att: Vec3,
     pub phi: f32,
     pub gamma: f32,
 }
 
 impl Spotlight {
-    pub fn new(pos: Vec3, dir: Vec3, phi: f32, gamma: f32) -> Self {
+    pub fn new(
+        pos: Vec3,
+        dir: Vec3,
+        amb: Vec3,
+        diff: Vec3,
+        spec: Vec3,
+        att: Vec3,
+        phi: f32,
+        gamma: f32,
+    ) -> Self {
         Spotlight {
             pos,
             dir,
+            amb,
+            diff,
+            spec,
+            att,
             phi,
             gamma,
         }

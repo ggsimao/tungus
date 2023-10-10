@@ -15,7 +15,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use lighting::{DirectionalLight, Spotlight};
+use lighting::{DirectionalLight, PointLight, Spotlight};
 use model::{Hexahedron, Triangle, TriangularPyramid, Vertex};
 use nalgebra_glm::*;
 use rendering::{
@@ -24,7 +24,7 @@ use rendering::{
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{ffi::c_void, path::Path};
 use systems::Camera;
-use textures::Texture;
+use textures::{Material, Texture};
 
 pub mod helpers;
 pub mod lighting;
@@ -110,18 +110,36 @@ fn main() {
     texture2.load(Path::new(CONTAINER_SPECULAR));
     texture2.set_wrapping(GL_REPEAT);
     texture2.set_filters(GL_NEAREST, GL_NEAREST);
+    let box_m = Material::new(texture1, texture2, 128.0);
 
-    let sun = DirectionalLight::new(vec3(0.5, -1.0, 0.5));
+    let ambient = vec3(0.2, 0.2, 0.2);
+    let diffuse = vec3(1.0, 1.0, 1.0);
+    let specular = vec3(1.0, 1.0, 1.0);
+    let attenuation = vec3(1.0, 0.5, 0.25);
 
-    let mut lamp_drawers: Vec<HexahedronDrawer> = Vec::new();
+    let sun = DirectionalLight::new(vec3(0.5, -1.0, 0.5), ambient, diffuse, specular);
+
+    let mut lamps: [PointLight; 4] =
+        [PointLight::new(vec3(0.0, 0.0, 0.0), ambient, diffuse, specular, attenuation); 4];
+    lamps[0].pos = vec3(0.0, 2.0, 0.0);
+    lamps[1].pos = vec3(-1.0, -2.0, -1.0);
+    lamps[2].pos = vec3(1.0, 0.0, 1.0);
+    lamps[3].pos = vec3(0.0, -10.0, 0.0);
+
+    let (phi, gamma) = (15.0_f32.to_radians(), 20.0_f32.to_radians());
 
     let mut flashlight = Spotlight::new(
         main_camera.get_pos(),
         main_camera.get_dir(),
-        30.0_f32.to_radians(),
-        35.0_f32.to_radians(),
+        ambient / 2.0,
+        diffuse / 2.0,
+        specular / 2.0,
+        attenuation,
+        15.0_f32.to_radians(),
+        20.0_f32.to_radians(),
     );
 
+    let mut lamp_drawers: Vec<HexahedronDrawer> = Vec::new();
     for _ in 0..8 {
         let mut cube = Hexahedron::cube(1.0);
         cube.tex_coords_from_vectors(all_texcoords);
@@ -163,7 +181,7 @@ fn main() {
                         Keycode::LCTRL => ascend_delta = translate_speed * -pressed_value,
                         Keycode::S => walk_delta = translate_speed * pressed_value,
                         Keycode::W => walk_delta = translate_speed * -pressed_value,
-                        Keycode::Q => {
+                        Keycode::F => {
                             if pressed_value != 0.0 {
                                 flashlight_on = !flashlight_on
                             }
@@ -188,6 +206,10 @@ fn main() {
         main_camera.translate_longitudinal(side_delta);
         main_camera.translate_forward(walk_delta);
         main_camera.translate_vertical(ascend_delta);
+        flashlight.phi = phi * flashlight_on as i32 as f32;
+        flashlight.gamma = gamma * flashlight_on as i32 as f32;
+        flashlight.pos = main_camera.get_pos();
+        flashlight.dir = main_camera.get_dir();
 
         unsafe {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -200,32 +222,13 @@ fn main() {
             vec3(1.0, 0.0, 1.0),
             vec3(0.0, -10.0, 0.0),
         ];
-        let cube_view = main_camera.look_at();
         let projection = perspective(1.0, main_camera.get_fov(), 0.1, 100.0);
         shader_program_cube.use_program();
-        shader_program_cube.set_matrix_4fv("view", cube_view.as_ptr());
-        shader_program_cube.set_matrix_4fv("projection", projection.as_ptr());
-        shader_program_cube.set_1i("material.diffuse", texture1.0 as i32 - 1);
-        unsafe {
-            glActiveTexture(GL_TEXTURE0);
-        }
-        texture1.bind();
-        shader_program_cube.set_1i("material.specular", texture2.0 as i32 - 1);
-        shader_program_cube.set_1f("material.shininess", 128.0);
-        shader_program_cube.set_3f("objectColor", [1.0, 1.0, 1.0]);
-        shader_program_cube.set_3f("lightColor", [1.0, 1.0, 1.0]);
-        shader_program_cube.set_3f(
-            "dirLight.direction",
-            [sun.angle.x, sun.angle.y, sun.angle.z],
-        );
-        shader_program_cube.set_3f("dirLight.ambient", [0.2, 0.2, 0.2]);
-        shader_program_cube.set_3f("dirLight.diffuse", [1.0, 1.0, 1.0]);
-        shader_program_cube.set_3f("dirLight.specular", [1.0, 1.0, 1.0]);
-        shader_program_cube.set_3f("viewPos", main_camera.get_pos().into());
-        unsafe {
-            glActiveTexture(GL_TEXTURE1);
-        }
-        texture2.bind();
+        shader_program_cube.set_view(&main_camera);
+        shader_program_cube.set_matrix_4fv("projectionMatrix", projection.as_ptr());
+        shader_program_cube.set_material("material", &box_m);
+        shader_program_cube.set_directional_light("dirLight", &sun);
+
         object_vao.bind();
 
         for i in 0..8 {
@@ -240,77 +243,27 @@ fn main() {
             );
             let normal = mat4_to_mat3(&cube_model.try_inverse().unwrap().transpose());
 
-            shader_program_cube.set_matrix_4fv("model", cube_model.as_ptr());
+            shader_program_cube.set_matrix_4fv("modelMatrix", cube_model.as_ptr());
             shader_program_cube.set_matrix_3fv("normalMatrix", normal.as_ptr());
-            shader_program_cube.set_3f("material.diffuse", [1.0, 1.0, 1.0]);
-            shader_program_cube.set_3f("material.specular", [1.0, 1.0, 1.0]);
-            shader_program_cube.set_1f("material.shininess", 32.0);
             for i in 0..4 {
-                shader_program_cube.set_3f(
-                    format!("pointLights[{}].position", i).as_str(),
-                    [
-                        lamp_positions[i].x,
-                        lamp_positions[i].y,
-                        lamp_positions[i].z,
-                    ],
-                );
-                shader_program_cube.set_1f(format!("pointLights[{}].constant", i).as_str(), 1.0);
-                shader_program_cube.set_1f(format!("pointLights[{}].linear", i).as_str(), 0.5);
-                shader_program_cube.set_1f(format!("pointLights[{}].quadratic", i).as_str(), 0.25);
-                shader_program_cube.set_3f(
-                    format!("pointLights[{}].ambient", i).as_str(),
-                    [0.2, 0.2, 0.2],
-                );
-                shader_program_cube.set_3f(
-                    format!("pointLights[{}].diffuse", i).as_str(),
-                    [1.0, 1.0, 1.0],
-                );
-                shader_program_cube.set_3f(
-                    format!("pointLights[{}].specular", i).as_str(),
-                    [1.0, 1.0, 1.0],
-                );
+                shader_program_cube
+                    .set_point_light(format!("pointLights[{}]", i).as_str(), &lamps[i]);
             }
-            shader_program_cube.set_3f(
-                "spotlight.position",
-                [
-                    main_camera.get_pos().x,
-                    main_camera.get_pos().y,
-                    main_camera.get_pos().z,
-                ],
-            );
-            shader_program_cube.set_3f(
-                "spotlight.direction",
-                [
-                    main_camera.get_dir().x,
-                    main_camera.get_dir().y,
-                    main_camera.get_dir().z,
-                ],
-            );
-            shader_program_cube.set_3f("spotlight.ambient", [0.2, 0.2, 0.2]);
-            shader_program_cube.set_3f("spotlight.diffuse", [0.5, 0.5, 0.5]);
-            shader_program_cube.set_3f("spotlight.specular", [0.5, 0.5, 0.5]);
-            if flashlight_on {
-                shader_program_cube.set_1f("spotlight.phiCos", flashlight.phi.cos());
-                shader_program_cube.set_1f("spotlight.gammaCos", flashlight.gamma.cos());
-            } else {
-                shader_program_cube.set_1f("spotlight.phiCos", 1.0);
-                shader_program_cube.set_1f("spotlight.gammaCos", 1.0);
-            }
+            shader_program_cube.set_spotlight("spotlight", &flashlight);
 
             cube_drawers[i].ready_buffers();
             cube_drawers[i].draw();
         }
         let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
-        let lamp_view = main_camera.look_at();
         shader_program_lamp.use_program();
-        shader_program_lamp.set_matrix_4fv("view", lamp_view.as_ptr());
-        shader_program_lamp.set_matrix_4fv("projection", projection.as_ptr());
+        shader_program_lamp.set_view(&main_camera);
+        shader_program_lamp.set_matrix_4fv("projectionMatrix", projection.as_ptr());
         lamp_vao.bind();
         for i in 0..4 {
             let lamp_trans = translation(&lamp_positions[i]);
             let lamp_model = lamp_trans * lamp_scale;
 
-            shader_program_lamp.set_matrix_4fv("model", lamp_model.as_ptr());
+            shader_program_lamp.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
 
             lamp_drawers[i].ready_buffers();
             lamp_drawers[i].draw();

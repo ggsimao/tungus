@@ -49,8 +49,6 @@ uniform PointLight pointLights[NR_POINT_LIGHTS];
 uniform Spotlight spotlight;
 
 uniform Material material;
-uniform vec3 objectColor;
-uniform vec3 lightColor;
 uniform vec3 viewPos;
 
 out vec4 fragColor;
@@ -109,7 +107,7 @@ void main() {
     vec3 norm = normalize(normal);
     vec3 viewDir = normalize(viewPos - fragPos);
 
-    vec3 result = calculateDirectionalLight(dirLight, norm, viewDir) * objectColor;
+    vec3 result = calculateDirectionalLight(dirLight, norm, viewDir);
 
     for (int i = 0; i < NR_POINT_LIGHTS; i++)
         result += calculatePointLight(pointLights[i], norm, fragPos, viewDir);

@@ -93,4 +93,16 @@ impl Material {
             shininess,
         }
     }
+
+    pub fn get_diffuse(&self) -> &Texture {
+        &self.diffuse
+    }
+
+    pub fn get_specular(&self) -> &Texture {
+        &self.specular
+    }
+
+    pub fn get_shininess(&self) -> f32 {
+        self.shininess
+    }
 }

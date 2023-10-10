@@ -1,7 +1,8 @@
+use std::f32::consts::PI;
+
 use nalgebra_glm::*;
 
 const ANGLE_LOWER_BOUND: f32 = 0.001;
-const ANGLE_UPPER_BOUND: f32 = std::f32::consts::PI - 0.2;
 
 pub struct Camera {
     pos: Vec3,
@@ -29,7 +30,7 @@ impl Camera {
             pitch,
             yaw,
             roll: 0.0,
-            fov: 0.79,
+            fov: 1.0,
         }
     }
 
@@ -67,11 +68,14 @@ impl Camera {
         direction *= offset;
         self.pos -= direction;
     }
+    pub fn translate_vertical(&mut self, offset: f32) {
+        self.pos.y += offset;
+    }
 
     pub fn rotate(&mut self, euler_angles: Vec3) {
         self.pitch = (self.pitch + euler_angles.x.to_radians())
-            .max(-1.55)
-            .min(1.55);
+            .max(-PI / 2.0 + ANGLE_LOWER_BOUND)
+            .min(PI / 2.0 - ANGLE_LOWER_BOUND);
         self.yaw += euler_angles.y.to_radians();
         self.roll += euler_angles.z.to_radians();
 
@@ -94,5 +98,12 @@ impl Camera {
     }
     pub fn get_fov(&self) -> f32 {
         self.fov
+    }
+
+    pub fn get_pos(&self) -> Vec3 {
+        self.pos
+    }
+    pub fn get_dir(&self) -> Vec3 {
+        self.direction
     }
 }

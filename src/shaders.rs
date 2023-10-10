@@ -2,22 +2,20 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
+use nalgebra_glm::vec3;
 use std::ffi::CString;
 use std::path::Path;
 
 use crate::helpers;
+use crate::lighting::DirectionalLight;
+use crate::lighting::PointLight;
+use crate::lighting::Spotlight;
+use crate::systems::Camera;
+use crate::textures::Material;
 
-/// A handle to a [Shader
-/// Object](https://www.khronos.org/opengl/wiki/GLSL_Object#Shader_objects)
 pub struct Shader(pub u32);
 
 impl Shader {
-    /// Makes a new shader.
-    ///
-    /// Prefer the [`Shader::from_source`](Shader::from_source) method.
-    ///
-    /// Possibly skip the direct creation of the shader object and use
-    /// [`ShaderProgram::from_vert_frag`](ShaderProgram::from_vert_frag).
     pub fn new(ty: ShaderType) -> Option<Self> {
         let shader = glCreateShader(GLenum(ty as u32));
         if shader != 0 {
@@ -27,9 +25,6 @@ impl Shader {
         }
     }
 
-    /// Assigns a source string to the shader.
-    ///
-    /// Replaces any previously assigned source.
     pub fn set_source(&self, src: &str) {
         unsafe {
             glShaderSource(
@@ -41,21 +36,16 @@ impl Shader {
         }
     }
 
-    /// Compiles the shader based on the current source.
     pub fn compile(&self) {
         glCompileShader(self.0);
     }
 
-    /// Checks if the last compile was successful or not.
     pub fn compile_success(&self) -> bool {
         let mut compiled = 0;
         unsafe { glGetShaderiv(self.0, GL_COMPILE_STATUS, &mut compiled) };
         compiled == GL_TRUE.0 as i32
     }
 
-    /// Gets the info log for the shader.
-    ///
-    /// Usually you use this to get the compilation log when a compile failed.
     pub fn info_log(&self) -> String {
         let mut needed_len = 0;
         unsafe { glGetShaderiv(self.0, GL_INFO_LOG_LENGTH, &mut needed_len) };
@@ -73,21 +63,10 @@ impl Shader {
         String::from_utf8_lossy(&v).into_owned()
     }
 
-    /// Marks a shader for deletion.
-    ///
-    /// Note: This _does not_ immediately delete the shader. It only marks it for
-    /// deletion. If the shader has been previously attached to a program then the
-    /// shader will stay allocated until it's unattached from that program.
     pub fn delete(self) {
         glDeleteShader(self.0);
     }
 
-    /// Takes a shader type and source string and produces either the compiled
-    /// shader or an error message.
-    ///
-    /// Prefer [`ShaderProgram::from_vert_frag`](ShaderProgram::from_vert_frag),
-    /// it makes a complete program from the vertex and fragment sources all at
-    /// once.
     pub fn from_source(ty: ShaderType, path: &Path) -> Result<Self, String> {
         let source = helpers::read_from_file(path);
         let id = Self::new(ty).ok_or_else(|| "Couldn't allocate new shader".to_string())?;
@@ -103,25 +82,13 @@ impl Shader {
     }
 }
 
-/// The types of shader object.
 pub enum ShaderType {
-    /// Vertex shaders determine the position of geometry within the screen.
     VertexShader = GL_VERTEX_SHADER.0 as isize,
-    /// Fragment shaders determine the color output of geometry.
-    ///
-    /// Also other values, but mostly color.
     FragmentShader = GL_FRAGMENT_SHADER.0 as isize,
 }
 
-/// A handle to a [Program
-/// Object](https://www.khronos.org/opengl/wiki/GLSL_Object#Program_objects)
 pub struct ShaderProgram(pub u32);
 impl ShaderProgram {
-    /// Allocates a new program object.
-    ///
-    /// Prefer [`ShaderProgram::from_vert_frag`](ShaderProgram::from_vert_frag),
-    /// it makes a complete program from the vertex and fragment sources all at
-    /// once.
     pub fn new() -> Option<Self> {
         let prog = glCreateProgram();
         if prog != 0 {
@@ -131,26 +98,20 @@ impl ShaderProgram {
         }
     }
 
-    /// Attaches a shader object to this program object.
     pub fn attach_shader(&self, shader: &Shader) {
         glAttachShader(self.0, shader.0);
     }
 
-    /// Links the various attached, compiled shader objects into a usable program.
     pub fn link_program(&self) {
         glLinkProgram(self.0);
     }
 
-    /// Checks if the last linking operation was successful.
     pub fn link_success(&self) -> bool {
         let mut success = 0;
         unsafe { glGetProgramiv(self.0, GL_LINK_STATUS, &mut success) };
         success == GL_TRUE.0 as i32
     }
 
-    /// Gets the log data for this program.
-    ///
-    /// This is usually used to check the message when a program failed to link.
     pub fn info_log(&self) -> String {
         let mut needed_len = 0;
         unsafe { glGetProgramiv(self.0, GL_INFO_LOG_LENGTH, &mut needed_len) };
@@ -168,25 +129,14 @@ impl ShaderProgram {
         String::from_utf8_lossy(&v).into_owned()
     }
 
-    /// Sets the program as the program to use when drawing.
     pub fn use_program(&self) {
         glUseProgram(self.0);
     }
 
-    /// Marks the program for deletion.
-    ///
-    /// Note: This _does not_ immediately delete the program. If the program is
-    /// currently in use it won't be deleted until it's not the active program.
-    /// When a program is finally deleted and attached shaders are unattached.
     pub fn delete(self) {
         glDeleteProgram(self.0);
     }
 
-    /// Takes a vertex shader source string and a fragment shader source string
-    /// and either gets you a working program object or gets you an error message.
-    ///
-    /// This is the preferred way to create a simple shader program in the common
-    /// case. It's just less error prone than doing all the steps yourself.
     pub fn from_vert_frag(vert: &str, frag: &str) -> Result<Self, String> {
         let p = Self::new().ok_or_else(|| "Couldn't allocate a program".to_string())?;
         let v = Shader::from_source(ShaderType::VertexShader, &Path::new(vert))
@@ -210,37 +160,90 @@ impl ShaderProgram {
     fn get_uniform_location(&self, name: &str) -> i32 {
         unsafe {
             let uniform_name = CString::new(name.as_bytes()).unwrap().into_raw() as *const u8;
-            let vertex_color_location: i32 = glGetUniformLocation(self.0, uniform_name);
-            vertex_color_location
+            let location: i32 = glGetUniformLocation(self.0, uniform_name);
+            location
         }
     }
 
     pub fn set_1b(&self, name: &str, value: bool) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1i(vertex_color_location, value.into()) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1i(location, value.into()) }
     }
     pub fn set_1i(&self, name: &str, value: i32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1i(vertex_color_location, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1i(location, value) }
     }
     pub fn set_1f(&self, name: &str, value: f32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniform1f(vertex_color_location, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform1f(location, value) }
     }
     pub fn set_4f(&self, name: &str, value: [f32; 4]) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe {
-            glUniform4f(
-                vertex_color_location,
-                value[0],
-                value[1],
-                value[2],
-                value[3],
-            )
-        }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform4f(location, value[0], value[1], value[2], value[3]) }
+    }
+    pub fn set_3f(&self, name: &str, value: [f32; 3]) {
+        let location = self.get_uniform_location(name);
+        unsafe { glUniform3f(location, value[0], value[1], value[2]) }
     }
     pub fn set_matrix_4fv(&self, name: &str, value: *const f32) {
-        let vertex_color_location = self.get_uniform_location(name);
-        unsafe { glUniformMatrix4fv(vertex_color_location, 1, 0, value) }
+        let location = self.get_uniform_location(name);
+        unsafe { glUniformMatrix4fv(location, 1, 0, value) }
+    }
+    pub fn set_matrix_3fv(&self, name: &str, value: *const f32) {
+        let location = self.get_uniform_location(name);
+        unsafe { glUniformMatrix3fv(location, 1, 0, value) }
+    }
+    pub fn set_material(&self, name: &str, value: &Material) {
+        unsafe {
+            glActiveTexture(GL_TEXTURE0);
+        }
+        value.get_diffuse().bind();
+        self.set_1i(
+            format!("{}.diffuse", name).as_str(),
+            value.get_diffuse().0 as i32 - 1,
+        );
+        unsafe {
+            glActiveTexture(GL_TEXTURE1);
+        }
+        value.get_specular().bind();
+        self.set_1i(
+            format!("{}.specular", name).as_str(),
+            value.get_specular().0 as i32 - 1,
+        );
+        self.set_1f(
+            format!("{}.shininess", name).as_str(),
+            value.get_shininess(),
+        );
+    }
+    pub fn set_directional_light(&self, name: &str, value: &DirectionalLight) {
+        self.set_3f(format!("{}.direction", name).as_str(), value.dir.into());
+        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
+        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
+        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+    }
+    pub fn set_point_light(&self, name: &str, value: &PointLight) {
+        self.set_3f(format!("{}.position", name).as_str(), value.pos.into());
+        self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
+        self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
+        self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
+        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
+        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
+        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+    }
+    pub fn set_spotlight(&self, name: &str, value: &Spotlight) {
+        self.set_3f(format!("{}.position", name).as_str(), value.pos.into());
+        self.set_3f(format!("{}.direction", name).as_str(), value.dir.into());
+        self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
+        self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
+        self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
+        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
+        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
+        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+        self.set_1f(format!("{}.phiCos", name).as_str(), value.phi.cos());
+        self.set_1f(format!("{}.gammaCos", name).as_str(), value.gamma.cos());
+    }
+    pub fn set_view(&self, camera: &Camera) {
+        self.set_matrix_4fv("viewMatrix", camera.look_at().as_ptr());
+        self.set_3f("viewPos", camera.get_pos().into());
     }
 }

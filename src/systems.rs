@@ -68,6 +68,9 @@ impl Camera {
         direction *= offset;
         self.pos -= direction;
     }
+    pub fn translate_vertical(&mut self, offset: f32) {
+        self.pos.y += offset;
+    }
 
     pub fn rotate(&mut self, euler_angles: Vec3) {
         self.pitch = (self.pitch + euler_angles.x.to_radians())
@@ -99,5 +102,8 @@ impl Camera {
 
     pub fn get_pos(&self) -> Vec3 {
         self.pos
+    }
+    pub fn get_dir(&self) -> Vec3 {
+        self.direction
     }
 }

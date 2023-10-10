@@ -78,3 +78,19 @@ impl Texture {
         }
     }
 }
+
+pub struct Material {
+    diffuse: Texture,
+    specular: Texture,
+    shininess: f32,
+}
+
+impl Material {
+    pub fn new(diff: Texture, spec: Texture, shininess: f32) -> Self {
+        Material {
+            diffuse: diff,
+            specular: spec,
+            shininess,
+        }
+    }
+}

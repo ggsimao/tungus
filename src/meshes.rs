@@ -1,31 +1,40 @@
 use bytemuck::{NoUninit, Pod, Zeroable};
+use gl33::gl_core_types::*;
+use gl33::gl_enumerations::*;
+use gl33::gl_groups::*;
+use gl33::global_loader::*;
 use nalgebra_glm::*;
 
-use crate::rendering::Buffer;
+use crate::rendering::buffer_data;
+use crate::shaders::Shader;
+use crate::shaders::ShaderProgram;
+use crate::textures::TextureType;
+use crate::{
+    rendering::{Buffer, BufferType, VertexArray},
+    textures::Texture,
+};
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
+#[repr(C)]
 pub struct Vertex {
-    pos: Vec3,
-    normal: Vec3,
-    color: Vec3,
-    tex_coords: Vec3,
+    pub pos: Vec3,
+    pub normal: Vec3,
+    pub tex_coords: Vec2,
 }
 
 impl Vertex {
     pub fn new(posx: f32, posy: f32, posz: f32) -> Self {
         Vertex {
             pos: vec3(posx, posy, posz),
-            color: vec3(0.0, 0.0, 0.0),
-            tex_coords: vec3(0.0, 0.0, 0.0),
             normal: vec3(0.0, 0.0, 0.0),
+            tex_coords: vec2(0.0, 0.0),
         }
     }
     pub fn from_vector(pos: Vec3) -> Self {
         Vertex {
             pos,
-            color: vec3(0.0, 0.0, 0.0),
-            tex_coords: vec3(0.0, 0.0, 0.0),
             normal: vec3(0.0, 0.0, 0.0),
+            tex_coords: vec2(0.0, 0.0),
         }
     }
 
@@ -35,28 +44,6 @@ impl Vertex {
     pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
         let matrix = rotation(angle, axis);
         self.pos = vec4_to_vec3(&(matrix * vec3_to_vec4(&self.pos)));
-    }
-
-    pub fn get_pos(&self) -> Vec3 {
-        self.pos
-    }
-
-    pub fn set_normal(&mut self, normal: Vec3) {
-        self.normal = normal;
-    }
-
-    pub fn set_color(&mut self, r: f32, g: f32, b: f32) {
-        self.color = vec3(r, g, b);
-    }
-    pub fn color_from_vector(&mut self, color: Vec3) {
-        self.color = color;
-    }
-
-    pub fn set_tex_coords(&mut self, x: f32, y: f32) {
-        self.tex_coords = vec3(x, y, 0.0);
-    }
-    pub fn tex_coords_from_vector(&mut self, tex_coords: Vec2) {
-        self.tex_coords = vec3(tex_coords.x, tex_coords.y, 0.0);
     }
 }
 
@@ -68,6 +55,128 @@ impl Clone for Vertex {
 impl Copy for Vertex {}
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
+
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub textures: Vec<Texture>,
+    vao: VertexArray,
+    vbo: Buffer,
+    ebo: Buffer,
+}
+
+impl Mesh {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, textures: Vec<Texture>) -> Self {
+        let vao = VertexArray::new().expect("Couldn't make a VAO");
+        let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
+        let ebo = Buffer::new().expect("Couldn't make the indices buffer");
+
+        let mesh = Mesh {
+            vertices,
+            indices,
+            textures,
+            vao,
+            vbo,
+            ebo,
+        };
+        mesh.setup_mesh();
+        mesh
+    }
+
+    fn setup_mesh(&self) {
+        self.vao.bind();
+
+        self.vbo.bind(BufferType::Array);
+        buffer_data(
+            BufferType::Array,
+            bytemuck::cast_slice(&self.vertices),
+            GL_STATIC_DRAW,
+        );
+
+        self.ebo.bind(BufferType::ElementArray);
+        buffer_data(
+            BufferType::ElementArray,
+            bytemuck::cast_slice(&self.indices),
+            GL_STATIC_DRAW,
+        );
+
+        unsafe {
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(
+                0,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, pos) as *const _, // might seem redundant, but it's just in case the order changes
+            );
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, normal) as *const _,
+            );
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(
+                2,
+                2,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, tex_coords) as *const _,
+            );
+        }
+    }
+
+    pub fn draw(&self, shader: &ShaderProgram) {
+        let (mut diffuse_count, mut specular_count) = (0, 0);
+        for i in 0..self.textures.len() {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + i as u32));
+            }
+            self.textures[i].bind();
+            let ttype = self.textures[i].get_type();
+            let name;
+            match ttype {
+                TextureType::Diffuse => {
+                    name = format!(
+                        "material.{:?}[{}]",
+                        self.textures[i].get_type(),
+                        diffuse_count
+                    );
+                    diffuse_count += 1;
+                }
+                TextureType::Specular => {
+                    name = format!(
+                        "material.{:?}[{}]",
+                        self.textures[i].get_type(),
+                        specular_count
+                    );
+                    specular_count += 1;
+                }
+            }
+            shader.set_1i(&name, (self.textures[i].get_id() - 1) as i32);
+        }
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        shader.set_1f("material.shininess", 128.0); // TEMP
+        unsafe {
+            glActiveTexture(GL_TEXTURE0);
+        }
+        self.vao.bind();
+        unsafe {
+            glDrawElements(
+                GL_TRIANGLES,
+                self.indices.len() as i32,
+                GL_UNSIGNED_INT,
+                std::ptr::null(),
+            );
+        }
+        VertexArray::clear_binding();
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct Triangle {
@@ -117,15 +226,9 @@ impl Triangle {
         centroid /= 3.0
     }
 
-    pub fn colors_from_vectors(&mut self, colors: [Vec3; 3]) {
-        for i in 0..self.vertices.len() {
-            self.vertices[i].color_from_vector(colors[i]);
-        }
-    }
-
     pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 3]) {
         for i in 0..self.vertices.len() {
-            self.vertices[i].tex_coords_from_vector(tex_coords[i]);
+            self.vertices[i].tex_coords = tex_coords[i];
         }
     }
 }
@@ -170,24 +273,14 @@ impl Quadrilateral {
         centroid /= 4.0
     }
 
-    pub fn colors_from_vectors(&mut self, colors: [Vec3; 4]) {
-        for i in 0..self.vertices.len() {
-            self.vertices[i].color_from_vector(colors[i]);
-        }
-    }
-
     pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 4]) {
         for i in 0..self.vertices.len() {
-            self.vertices[i].tex_coords_from_vector(tex_coords[i]);
+            self.vertices[i].tex_coords = tex_coords[i];
         }
     }
 }
 
-pub struct Polygon {
-    vertices: Vec<Vertex>,
-    indices: Vec<[usize; 3]>,
-}
-
+#[derive(Debug)]
 pub struct Hexahedron {
     vertices: [Vertex; 8],
     indices: [u32; 36],
@@ -216,8 +309,8 @@ impl Hexahedron {
             let v1 = vertices[indices[i * 6 + 1] as usize];
             let v2 = vertices[indices[i * 6 + 2] as usize];
             let normal = normalize(&cross(
-                &(v1.get_pos() - main_vertex.get_pos()),
-                &(v2.get_pos() - main_vertex.get_pos()),
+                &(v1.pos - main_vertex.pos),
+                &(v2.pos - main_vertex.pos),
             ));
             normals[indices[i * 6] as usize] += normal;
             normals[indices[i * 6 + 1] as usize] += normal;
@@ -225,13 +318,13 @@ impl Hexahedron {
 
             let opposite_vertex = vertices[indices[i * 6 + 5] as usize];
             let normal = normalize(&cross(
-                &(v2.get_pos() - opposite_vertex.get_pos()),
-                &(v1.get_pos() - opposite_vertex.get_pos()),
+                &(v2.pos - opposite_vertex.pos),
+                &(v1.pos - opposite_vertex.pos),
             ));
             normals[indices[i * 6 + 5] as usize] += normal;
         }
         for i in 0..8 {
-            vertices[i].set_normal(normals[i] / 4.0);
+            vertices[i].normal = normals[i] / 4.0;
         }
         Hexahedron { vertices, indices }
     }
@@ -247,15 +340,9 @@ impl Hexahedron {
         }
     }
 
-    pub fn colors_from_vectors(&mut self, colors: [Vec3; 8]) {
-        for i in 0..8 {
-            self.vertices[i].color_from_vector(colors[i]);
-        }
-    }
-
     pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 8]) {
         for i in 0..8 {
-            self.vertices[i].tex_coords_from_vector(tex_coords[i]);
+            self.vertices[i].tex_coords = tex_coords[i];
         }
     }
 
@@ -292,15 +379,15 @@ impl TriangularPyramid {
             let v1 = vertices[indices[i * 3 + 1] as usize];
             let v2 = vertices[indices[i * 3 + 2] as usize];
             let normal = normalize(&cross(
-                &(v1.get_pos() - main_vertex.get_pos()),
-                &(v2.get_pos() - main_vertex.get_pos()),
+                &(v1.pos - main_vertex.pos),
+                &(v2.pos - main_vertex.pos),
             ));
             normals[indices[i * 3] as usize] += normal;
             normals[indices[i * 3 + 1] as usize] += normal;
             normals[indices[i * 3 + 2] as usize] += normal;
         }
         for i in 0..4 {
-            vertices[i].set_normal(normals[i] / 3.0);
+            vertices[i].normal = normals[i] / 3.0;
         }
 
         TriangularPyramid { vertices, indices }
@@ -317,15 +404,9 @@ impl TriangularPyramid {
         }
     }
 
-    pub fn colors_from_vectors(&mut self, colors: [Vec3; 4]) {
-        for i in 0..4 {
-            self.vertices[i].color_from_vector(colors[i]);
-        }
-    }
-
     pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 4]) {
         for i in 0..4 {
-            self.vertices[i].tex_coords_from_vector(tex_coords[i]);
+            self.vertices[i].tex_coords = tex_coords[i];
         }
     }
 

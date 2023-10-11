@@ -6,11 +6,11 @@ use nalgebra_glm::vec3;
 use std::ffi::CString;
 use std::path::Path;
 
+use crate::camera::Camera;
 use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
-use crate::systems::Camera;
 use crate::textures::Material;
 
 pub struct Shader(pub u32);
@@ -200,7 +200,7 @@ impl ShaderProgram {
         value.get_diffuse().bind();
         self.set_1i(
             format!("{}.diffuse", name).as_str(),
-            value.get_diffuse().0 as i32 - 1,
+            value.get_diffuse().get_id() as i32 - 1,
         );
         unsafe {
             glActiveTexture(GL_TEXTURE1);
@@ -208,7 +208,7 @@ impl ShaderProgram {
         value.get_specular().bind();
         self.set_1i(
             format!("{}.specular", name).as_str(),
-            value.get_specular().0 as i32 - 1,
+            value.get_specular().get_id() as i32 - 1,
         );
         self.set_1f(
             format!("{}.shininess", name).as_str(),

@@ -8,15 +8,25 @@ use std::ffi::CString;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-pub struct Texture(pub u32);
+#[derive(Copy, Clone, Debug)]
+pub enum TextureType {
+    Diffuse,
+    Specular,
+}
+
+#[derive(Copy, Clone)]
+pub struct Texture {
+    id: u32,
+    ttype: TextureType,
+}
 
 impl Texture {
-    pub fn new() -> Self {
+    pub fn new(ttype: TextureType) -> Self {
         let mut texture: u32 = 0;
         unsafe {
             glGenTextures(1, &mut texture);
         }
-        Self(texture)
+        Self { id: texture, ttype }
     }
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
@@ -27,7 +37,7 @@ impl Texture {
             GL_RGB
         };
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.0);
+            glBindTexture(GL_TEXTURE_2D, self.id);
             stbi_set_flip_vertically_on_load(1);
             let data = stbi_load(
                 path_string.as_ptr(),
@@ -54,7 +64,7 @@ impl Texture {
 
     pub fn bind(&self) {
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.0);
+            glBindTexture(GL_TEXTURE_2D, self.id);
         }
     }
 
@@ -76,6 +86,13 @@ impl Texture {
         unsafe {
             glTexParameteri(GL_TEXTURE_2D, axis, wrapping.0 as i32);
         }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    pub fn get_type(&self) -> TextureType {
+        self.ttype
     }
 }
 

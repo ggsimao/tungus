@@ -2,10 +2,13 @@
 #![allow(unused_imports)]
 #![allow(clippy::single_match)]
 #![allow(clippy::zero_ptr)]
+#![feature(offset_of)]
 
 const WINDOW_TITLE: &str = "Tungus";
 
+// use assimp;
 use beryllium::*;
+use camera::Camera;
 use core::{
     convert::{TryFrom, TryInto},
     mem::{size_of, size_of_val},
@@ -16,22 +19,19 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use lighting::{DirectionalLight, PointLight, Spotlight};
-use model::{Hexahedron, Triangle, TriangularPyramid, Vertex};
+use meshes::{Hexahedron, Mesh, Triangle, TriangularPyramid, Vertex};
 use nalgebra_glm::*;
-use rendering::{
-    Buffer, BufferType, Draw, HexahedronDrawer, PolygonMode, TriangularPyramidDrawer, VertexArray,
-};
+use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{ffi::c_void, path::Path};
-use systems::Camera;
-use textures::{Material, Texture};
+use textures::{Material, Texture, TextureType};
 
+pub mod camera;
 pub mod helpers;
 pub mod lighting;
-pub mod model;
+pub mod meshes;
 pub mod rendering;
 pub mod shaders;
-pub mod systems;
 pub mod textures;
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
@@ -86,31 +86,32 @@ fn main() {
         vec2(0.0, 0.0),
     ];
 
-    let mut cube_drawers: Vec<HexahedronDrawer> = Vec::new();
+    let mut cube_drawers: Vec<Mesh> = Vec::new();
+
+    let mut texture1 = Texture::new(TextureType::Diffuse);
+    texture1.load(Path::new(CONTAINER_TEXTURE));
+    texture1.set_wrapping(GL_REPEAT);
+    texture1.set_filters(GL_NEAREST, GL_NEAREST);
+    let mut texture2 = Texture::new(TextureType::Specular);
+    texture2.load(Path::new(CONTAINER_SPECULAR));
+    texture2.set_wrapping(GL_REPEAT);
+    texture2.set_filters(GL_NEAREST, GL_NEAREST);
+    // let box_m = Material::new(texture1, texture2, 128.0);
 
     for _ in 0..8 {
         let mut cube = Hexahedron::cube(1.0);
         cube.tex_coords_from_vectors(all_texcoords);
-        let cube_drawer = HexahedronDrawer::new(cube);
+        let cube_drawer = Mesh::new(
+            Vec::from(cube.get_vertices()),
+            Vec::from(cube.get_indices()),
+            vec![texture1, texture2],
+        );
         cube_drawers.push(cube_drawer);
     }
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
-    let object_vao = VertexArray::new().expect("Couldn't make a VAO");
-    let lamp_vao = VertexArray::new().expect("Couldn't make a VAO");
-
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
-
-    let mut texture1 = Texture::new();
-    texture1.load(Path::new(CONTAINER_TEXTURE));
-    texture1.set_wrapping(GL_REPEAT);
-    texture1.set_filters(GL_NEAREST, GL_NEAREST);
-    let mut texture2 = Texture::new();
-    texture2.load(Path::new(CONTAINER_SPECULAR));
-    texture2.set_wrapping(GL_REPEAT);
-    texture2.set_filters(GL_NEAREST, GL_NEAREST);
-    let box_m = Material::new(texture1, texture2, 128.0);
 
     let ambient = vec3(0.2, 0.2, 0.2);
     let diffuse = vec3(1.0, 1.0, 1.0);
@@ -139,11 +140,15 @@ fn main() {
         20.0_f32.to_radians(),
     );
 
-    let mut lamp_drawers: Vec<HexahedronDrawer> = Vec::new();
+    let mut lamp_drawers: Vec<Mesh> = Vec::new();
     for _ in 0..8 {
         let mut cube = Hexahedron::cube(1.0);
         cube.tex_coords_from_vectors(all_texcoords);
-        let cube_drawer = HexahedronDrawer::new(cube);
+        let cube_drawer = Mesh::new(
+            Vec::from(cube.get_vertices()),
+            Vec::from(cube.get_indices()),
+            vec![],
+        );
         lamp_drawers.push(cube_drawer);
     }
 
@@ -226,10 +231,8 @@ fn main() {
         shader_program_cube.use_program();
         shader_program_cube.set_view(&main_camera);
         shader_program_cube.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-        shader_program_cube.set_material("material", &box_m);
+        // shader_program_cube.set_material("material", &box_m);
         shader_program_cube.set_directional_light("dirLight", &sun);
-
-        object_vao.bind();
 
         for i in 0..8 {
             let mut cube_model = Mat4::identity();
@@ -251,22 +254,19 @@ fn main() {
             }
             shader_program_cube.set_spotlight("spotlight", &flashlight);
 
-            cube_drawers[i].ready_buffers();
-            cube_drawers[i].draw();
+            cube_drawers[i].draw(&shader_program_cube);
         }
         let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
         shader_program_lamp.use_program();
         shader_program_lamp.set_view(&main_camera);
         shader_program_lamp.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-        lamp_vao.bind();
         for i in 0..4 {
             let lamp_trans = translation(&lamp_positions[i]);
             let lamp_model = lamp_trans * lamp_scale;
 
             shader_program_lamp.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
 
-            lamp_drawers[i].ready_buffers();
-            lamp_drawers[i].draw();
+            lamp_drawers[i].draw(&shader_program_lamp);
         }
 
         win.swap_window();

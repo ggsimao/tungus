@@ -6,11 +6,11 @@ use nalgebra_glm::vec3;
 use std::ffi::CString;
 use std::path::Path;
 
+use crate::camera::Camera;
 use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
-use crate::systems::Camera;
 use crate::textures::Material;
 
 pub struct Shader(pub u32);
@@ -193,25 +193,28 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniformMatrix3fv(location, 1, 0, value) }
     }
-    pub fn set_material(&self, name: &str, value: &Material) {
-        unsafe {
-            glActiveTexture(GL_TEXTURE0);
+    pub fn set_material(&self, material_name: &str, value: &Material) {
+        let mut tex_count = 0;
+        for (i, diffuse) in value.get_diffuse_maps().iter().enumerate() {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            tex_count += 1;
+            diffuse.bind();
+            let name = format!("{}.diffuse[{}]", material_name, i);
+            self.set_1i(&name, (diffuse.get_id() - 1) as i32);
         }
-        value.get_diffuse().bind();
-        self.set_1i(
-            format!("{}.diffuse", name).as_str(),
-            value.get_diffuse().0 as i32 - 1,
-        );
-        unsafe {
-            glActiveTexture(GL_TEXTURE1);
+        for (i, specular) in value.get_specular_maps().iter().enumerate() {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            tex_count += 1;
+            specular.bind();
+            let name = format!("{}.specular[{}]", material_name, i);
+            self.set_1i(&name, (specular.get_id() - 1) as i32);
         }
-        value.get_specular().bind();
-        self.set_1i(
-            format!("{}.specular", name).as_str(),
-            value.get_specular().0 as i32 - 1,
-        );
         self.set_1f(
-            format!("{}.shininess", name).as_str(),
+            &format!("{}.shininess", material_name),
             value.get_shininess(),
         );
     }

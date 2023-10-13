@@ -194,26 +194,26 @@ impl ShaderProgram {
         unsafe { glUniformMatrix3fv(location, 1, 0, value) }
     }
     pub fn set_material(&self, name: &str, value: &Material) {
-        unsafe {
-            glActiveTexture(GL_TEXTURE0);
+        let mut tex_count = 0;
+        for (i, diffuse) in value.get_diffuse_maps().iter().enumerate() {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            tex_count += 1;
+            diffuse.bind();
+            let name = format!("material.diffuse[{}]", i);
+            self.set_1i(&name, (diffuse.get_id() - 1) as i32);
         }
-        value.get_diffuse().bind();
-        self.set_1i(
-            format!("{}.diffuse", name).as_str(),
-            value.get_diffuse().get_id() as i32 - 1,
-        );
-        unsafe {
-            glActiveTexture(GL_TEXTURE1);
+        for (i, specular) in value.get_specular_maps().iter().enumerate() {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            tex_count += 1;
+            specular.bind();
+            let name = format!("material.specular[{}]", i);
+            self.set_1i(&name, (specular.get_id() - 1) as i32);
         }
-        value.get_specular().bind();
-        self.set_1i(
-            format!("{}.specular", name).as_str(),
-            value.get_specular().get_id() as i32 - 1,
-        );
-        self.set_1f(
-            format!("{}.shininess", name).as_str(),
-            value.get_shininess(),
-        );
+        self.set_1f("material.shininess", value.get_shininess());
     }
     pub fn set_directional_light(&self, name: &str, value: &DirectionalLight) {
         self.set_3f(format!("{}.direction", name).as_str(), value.dir.into());

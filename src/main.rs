@@ -20,6 +20,7 @@ use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use lighting::{DirectionalLight, PointLight, Spotlight};
 use meshes::{Hexahedron, Mesh, Triangle, TriangularPyramid, Vertex};
+use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
 use shaders::{Shader, ShaderProgram, ShaderType};
@@ -30,6 +31,7 @@ pub mod camera;
 pub mod helpers;
 pub mod lighting;
 pub mod meshes;
+pub mod models;
 pub mod rendering;
 pub mod shaders;
 pub mod textures;
@@ -75,39 +77,9 @@ fn main() {
         glEnable(GL_DEPTH_TEST);
     }
 
-    let all_texcoords: [Vec2; 8] = [
-        vec2(1.0, 0.0),
-        vec2(0.0, 0.0),
-        vec2(1.0, 1.0),
-        vec2(0.0, 1.0),
-        vec2(1.0, 1.0),
-        vec2(0.0, 1.0),
-        vec2(1.0, 0.0),
-        vec2(0.0, 0.0),
-    ];
+    let box_m = Material::new(vec![], vec![], 128.0);
 
-    let mut cube_drawers: Vec<Mesh> = Vec::new();
-
-    let mut texture1 = Texture::new(TextureType::Diffuse);
-    texture1.load(Path::new(CONTAINER_TEXTURE));
-    texture1.set_wrapping(GL_REPEAT);
-    texture1.set_filters(GL_NEAREST, GL_NEAREST);
-    let mut texture2 = Texture::new(TextureType::Specular);
-    texture2.load(Path::new(CONTAINER_SPECULAR));
-    texture2.set_wrapping(GL_REPEAT);
-    texture2.set_filters(GL_NEAREST, GL_NEAREST);
-    // let box_m = Material::new(texture1, texture2, 128.0);
-
-    for _ in 0..8 {
-        let mut cube = Hexahedron::cube(1.0);
-        cube.tex_coords_from_vectors(all_texcoords);
-        let cube_drawer = Mesh::new(
-            Vec::from(cube.get_vertices()),
-            Vec::from(cube.get_indices()),
-            vec![texture1, texture2],
-        );
-        cube_drawers.push(cube_drawer);
-    }
+    let backpack = Model::new(Path::new("./src/resources/models/backpack.obj"));
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
@@ -142,12 +114,11 @@ fn main() {
 
     let mut lamp_drawers: Vec<Mesh> = Vec::new();
     for _ in 0..8 {
-        let mut cube = Hexahedron::cube(1.0);
-        cube.tex_coords_from_vectors(all_texcoords);
+        let cube = Hexahedron::cube(1.0);
         let cube_drawer = Mesh::new(
             Vec::from(cube.get_vertices()),
             Vec::from(cube.get_indices()),
-            vec![],
+            box_m.clone(),
         );
         lamp_drawers.push(cube_drawer);
     }
@@ -231,31 +202,18 @@ fn main() {
         shader_program_cube.use_program();
         shader_program_cube.set_view(&main_camera);
         shader_program_cube.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-        // shader_program_cube.set_material("material", &box_m);
         shader_program_cube.set_directional_light("dirLight", &sun);
 
-        for i in 0..8 {
-            let mut cube_model = Mat4::identity();
-            cube_model = translate(
-                &cube_model,
-                &vec3(
-                    (-1.0_f32).powf(i as f32 + 1.0) * 1.0,
-                    (-1.0_f32).powf((i / 4) as f32 + 1.0) * 1.0,
-                    (-1.0_f32).powf((i / 2) as f32 + 1.0) * 1.0,
-                ),
-            );
-            let normal = mat4_to_mat3(&cube_model.try_inverse().unwrap().transpose());
+        let model = Mat4::identity();
+        let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
 
-            shader_program_cube.set_matrix_4fv("modelMatrix", cube_model.as_ptr());
-            shader_program_cube.set_matrix_3fv("normalMatrix", normal.as_ptr());
-            for i in 0..4 {
-                shader_program_cube
-                    .set_point_light(format!("pointLights[{}]", i).as_str(), &lamps[i]);
-            }
-            shader_program_cube.set_spotlight("spotlight", &flashlight);
-
-            cube_drawers[i].draw(&shader_program_cube);
+        shader_program_cube.set_matrix_4fv("modelMatrix", model.as_ptr());
+        shader_program_cube.set_matrix_3fv("normalMatrix", normal.as_ptr());
+        for i in 0..4 {
+            shader_program_cube.set_point_light(format!("pointLights[{}]", i).as_str(), &lamps[i]);
         }
+        shader_program_cube.set_spotlight("spotlight", &flashlight);
+        backpack.draw(&shader_program_cube);
         let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
         shader_program_lamp.use_program();
         shader_program_lamp.set_view(&main_camera);

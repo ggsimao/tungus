@@ -8,6 +8,7 @@ use nalgebra_glm::*;
 use crate::rendering::buffer_data;
 use crate::shaders::Shader;
 use crate::shaders::ShaderProgram;
+use crate::textures::Material;
 use crate::textures::TextureType;
 use crate::{
     rendering::{Buffer, BufferType, VertexArray},
@@ -59,14 +60,14 @@ unsafe impl Pod for Vertex {}
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub textures: Vec<Texture>,
+    pub material: Material,
     vao: VertexArray,
     vbo: Buffer,
     ebo: Buffer,
 }
 
 impl Mesh {
-    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, textures: Vec<Texture>) -> Self {
+    pub fn new(vertices: Vec<Vertex>, indices: Vec<u32>, material: Material) -> Self {
         let vao = VertexArray::new().expect("Couldn't make a VAO");
         let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
         let ebo = Buffer::new().expect("Couldn't make the indices buffer");
@@ -74,7 +75,7 @@ impl Mesh {
         let mesh = Mesh {
             vertices,
             indices,
-            textures,
+            material,
             vao,
             vbo,
             ebo,
@@ -132,36 +133,7 @@ impl Mesh {
     }
 
     pub fn draw(&self, shader: &ShaderProgram) {
-        let (mut diffuse_count, mut specular_count) = (0, 0);
-        for i in 0..self.textures.len() {
-            unsafe {
-                glActiveTexture(GLenum(GL_TEXTURE0.0 + i as u32));
-            }
-            self.textures[i].bind();
-            let ttype = self.textures[i].get_type();
-            let name;
-            match ttype {
-                TextureType::Diffuse => {
-                    name = format!(
-                        "material.{:?}[{}]",
-                        self.textures[i].get_type(),
-                        diffuse_count
-                    );
-                    diffuse_count += 1;
-                }
-                TextureType::Specular => {
-                    name = format!(
-                        "material.{:?}[{}]",
-                        self.textures[i].get_type(),
-                        specular_count
-                    );
-                    specular_count += 1;
-                }
-            }
-            shader.set_1i(&name, (self.textures[i].get_id() - 1) as i32);
-        }
-        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        shader.set_1f("material.shininess", 128.0); // TEMP
+        shader.set_material("material", &self.material);
         unsafe {
             glActiveTexture(GL_TEXTURE0);
         }

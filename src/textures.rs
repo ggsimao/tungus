@@ -10,14 +10,15 @@ use std::path::Path;
 
 #[derive(Copy, Clone, Debug)]
 pub enum TextureType {
-    Diffuse,
-    Specular,
+    diffuse,
+    specular,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Debug)]
 pub struct Texture {
     id: u32,
     ttype: TextureType,
+    path: String,
 }
 
 impl Texture {
@@ -26,7 +27,11 @@ impl Texture {
         unsafe {
             glGenTextures(1, &mut texture);
         }
-        Self { id: texture, ttype }
+        Self {
+            id: texture,
+            ttype,
+            path: String::new(),
+        }
     }
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
@@ -60,6 +65,7 @@ impl Texture {
             glGenerateMipmap(GL_TEXTURE_2D);
             stbi_image_free(data as *mut c_void);
         }
+        self.path = path.display().to_string();
     }
 
     pub fn bind(&self) {
@@ -96,27 +102,28 @@ impl Texture {
     }
 }
 
+#[derive(Clone)]
 pub struct Material {
-    diffuse: Texture,
-    specular: Texture,
+    diffuse_maps: Vec<Texture>,
+    specular_maps: Vec<Texture>,
     shininess: f32,
 }
 
 impl Material {
-    pub fn new(diff: Texture, spec: Texture, shininess: f32) -> Self {
+    pub fn new(diff: Vec<Texture>, spec: Vec<Texture>, shininess: f32) -> Self {
         Material {
-            diffuse: diff,
-            specular: spec,
+            diffuse_maps: diff,
+            specular_maps: spec,
             shininess,
         }
     }
 
-    pub fn get_diffuse(&self) -> &Texture {
-        &self.diffuse
+    pub fn get_diffuse_maps(&self) -> &Vec<Texture> {
+        &self.diffuse_maps
     }
 
-    pub fn get_specular(&self) -> &Texture {
-        &self.specular
+    pub fn get_specular_maps(&self) -> &Vec<Texture> {
+        &self.specular_maps
     }
 
     pub fn get_shininess(&self) -> f32 {

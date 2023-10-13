@@ -8,15 +8,30 @@ use std::ffi::CString;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-pub struct Texture(pub u32);
+#[derive(Copy, Clone, Debug)]
+pub enum TextureType {
+    diffuse,
+    specular,
+}
+
+#[derive(Clone, Debug)]
+pub struct Texture {
+    id: u32,
+    ttype: TextureType,
+    path: String,
+}
 
 impl Texture {
-    pub fn new() -> Self {
+    pub fn new(ttype: TextureType) -> Self {
         let mut texture: u32 = 0;
         unsafe {
             glGenTextures(1, &mut texture);
         }
-        Self(texture)
+        Self {
+            id: texture,
+            ttype,
+            path: String::new(),
+        }
     }
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
@@ -27,7 +42,7 @@ impl Texture {
             GL_RGB
         };
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.0);
+            glBindTexture(GL_TEXTURE_2D, self.id);
             stbi_set_flip_vertically_on_load(1);
             let data = stbi_load(
                 path_string.as_ptr(),
@@ -50,11 +65,12 @@ impl Texture {
             glGenerateMipmap(GL_TEXTURE_2D);
             stbi_image_free(data as *mut c_void);
         }
+        self.path = path.display().to_string();
     }
 
     pub fn bind(&self) {
         unsafe {
-            glBindTexture(GL_TEXTURE_2D, self.0);
+            glBindTexture(GL_TEXTURE_2D, self.id);
         }
     }
 
@@ -77,29 +93,37 @@ impl Texture {
             glTexParameteri(GL_TEXTURE_2D, axis, wrapping.0 as i32);
         }
     }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    pub fn get_type(&self) -> TextureType {
+        self.ttype
+    }
 }
 
+#[derive(Clone)]
 pub struct Material {
-    diffuse: Texture,
-    specular: Texture,
+    diffuse_maps: Vec<Texture>,
+    specular_maps: Vec<Texture>,
     shininess: f32,
 }
 
 impl Material {
-    pub fn new(diff: Texture, spec: Texture, shininess: f32) -> Self {
+    pub fn new(diff: Vec<Texture>, spec: Vec<Texture>, shininess: f32) -> Self {
         Material {
-            diffuse: diff,
-            specular: spec,
+            diffuse_maps: diff,
+            specular_maps: spec,
             shininess,
         }
     }
 
-    pub fn get_diffuse(&self) -> &Texture {
-        &self.diffuse
+    pub fn get_diffuse_maps(&self) -> &Vec<Texture> {
+        &self.diffuse_maps
     }
 
-    pub fn get_specular(&self) -> &Texture {
-        &self.specular
+    pub fn get_specular_maps(&self) -> &Vec<Texture> {
+        &self.specular_maps
     }
 
     pub fn get_shininess(&self) -> f32 {

@@ -19,7 +19,7 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use lighting::{DirectionalLight, PointLight, Spotlight};
-use meshes::{Hexahedron, Mesh, Triangle, TriangularPyramid, Vertex};
+use meshes::{Mesh, Vertex};
 use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
@@ -77,8 +77,6 @@ fn main() {
         glEnable(GL_DEPTH_TEST);
     }
 
-    let box_m = Material::new(vec![], vec![], 128.0);
-
     let backpack = Model::new(Path::new("./src/resources/models/backpack.obj"));
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
@@ -112,15 +110,10 @@ fn main() {
         20.0_f32.to_radians(),
     );
 
-    let mut lamp_drawers: Vec<Mesh> = Vec::new();
-    for _ in 0..8 {
-        let cube = Hexahedron::cube(1.0);
-        let cube_drawer = Mesh::new(
-            Vec::from(cube.get_vertices()),
-            Vec::from(cube.get_indices()),
-            box_m.clone(),
-        );
-        lamp_drawers.push(cube_drawer);
+    let mut lamp_meshes: Vec<Mesh> = Vec::new();
+    for _ in 0..4 {
+        let cube = Mesh::cube(1.0);
+        lamp_meshes.push(cube);
     }
 
     let shader_program_cube =
@@ -214,6 +207,7 @@ fn main() {
         }
         shader_program_cube.set_spotlight("spotlight", &flashlight);
         backpack.draw(&shader_program_cube);
+
         let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
         shader_program_lamp.use_program();
         shader_program_lamp.set_view(&main_camera);
@@ -224,7 +218,7 @@ fn main() {
 
             shader_program_lamp.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
 
-            lamp_drawers[i].draw(&shader_program_lamp);
+            lamp_meshes[i].draw(&shader_program_lamp);
         }
 
         win.swap_window();

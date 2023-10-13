@@ -6,7 +6,7 @@ use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
 
-use crate::meshes::{Hexahedron, Quadrilateral, Triangle, TriangularPyramid, Vertex};
+use crate::meshes::Vertex;
 
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
     unsafe { glClearColor(r, g, b, a) }

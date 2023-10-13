@@ -148,119 +148,13 @@ impl Mesh {
         }
         VertexArray::clear_binding();
     }
-}
 
-#[derive(Debug, Copy, Clone)]
-pub struct Triangle {
-    vertices: [Vertex; 3],
-}
-
-impl Triangle {
-    pub fn equilateral(side: f32) -> Self {
-        let height = (0.75 * side * side).sqrt();
-        Triangle {
-            vertices: [
-                Vertex::new(-side / 2.0, -height / 2.0, 0.0),
-                Vertex::new(side / 2.0, -height / 2.0, 0.0),
-                Vertex::new(0.0, height / 2.0, 0.0),
-            ],
-        }
-    }
-    pub fn new(a: Vertex, b: Vertex, c: Vertex) -> Self {
-        Triangle {
-            vertices: [a, b, c],
-        }
-    }
-    pub fn from_array(vertices: [Vertex; 3]) -> Self {
-        Triangle { vertices }
-    }
-
-    pub fn get_vertices(&self) -> &[Vertex; 3] {
-        &self.vertices
-    }
-
-    pub fn translate(&mut self, offset_x: f32, offset_y: f32, offset_z: f32) {
-        for vertex in &mut self.vertices {
-            vertex.translate(offset_x, offset_y, offset_z);
-        }
-    }
-    pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
-        for vertex in &mut self.vertices {
-            vertex.rotate(angle, axis);
-        }
-    }
-
-    pub fn centroid(&self) {
-        let mut centroid = vec3(0.0, 0.0, 0.0);
-        for vertex in self.vertices {
-            centroid += vertex.pos;
-        }
-        centroid /= 3.0
-    }
-
-    pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 3]) {
-        for i in 0..self.vertices.len() {
-            self.vertices[i].tex_coords = tex_coords[i];
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Quadrilateral {
-    vertices: [Vertex; 4],
-}
-
-impl Quadrilateral {
-    pub fn square(side: f32) -> Self {
-        Quadrilateral {
-            vertices: [
-                Vertex::new(-side / 2.0, side / 2.0, 0.0),
-                Vertex::new(side / 2.0, side / 2.0, 0.0),
-                Vertex::new(side / 2.0, -side / 2.0, 0.0),
-                Vertex::new(-side / 2.0, -side / 2.0, 0.0),
-            ],
-        }
-    }
-
-    pub fn get_vertices(&self) -> &[Vertex; 4] {
-        &self.vertices
-    }
-
-    pub fn translate(&mut self, offset_x: f32, offset_y: f32, offset_z: f32) {
-        for vertex in &mut self.vertices {
-            vertex.translate(offset_x, offset_y, offset_z);
-        }
-    }
-    pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
-        for vertex in &mut self.vertices {
-            vertex.rotate(angle, axis);
-        }
-    }
-
-    pub fn centroid(&self) {
-        let mut centroid = vec3(0.0, 0.0, 0.0);
-        for vertex in self.vertices {
-            centroid += vertex.pos;
-        }
-        centroid /= 4.0
-    }
-
-    pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 4]) {
-        for i in 0..self.vertices.len() {
-            self.vertices[i].tex_coords = tex_coords[i];
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Hexahedron {
-    vertices: [Vertex; 8],
-    indices: [u32; 36],
-}
-
-impl Hexahedron {
     pub fn cube(side: f32) -> Self {
-        let mut vertices = [
+        let vao = VertexArray::new().expect("Couldn't make a VAO");
+        let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
+        let ebo = Buffer::new().expect("Couldn't make the indices buffer");
+
+        let mut vertices = vec![
             Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
@@ -270,7 +164,7 @@ impl Hexahedron {
             Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
         ];
-        let indices: [u32; 36] = [
+        let indices = vec![
             0, 2, 1, 1, 2, 3, 0, 1, 4, 4, 1, 5, 2, 0, 6, 6, 0, 4, 3, 7, 1, 1, 7, 5, 2, 6, 3, 3, 6,
             7, 7, 6, 5, 5, 6, 4,
         ];
@@ -298,95 +192,15 @@ impl Hexahedron {
         for i in 0..8 {
             vertices[i].normal = normals[i] / 4.0;
         }
-        Hexahedron { vertices, indices }
-    }
-
-    pub fn translate(&mut self, offset_x: f32, offset_y: f32, offset_z: f32) {
-        for vertex in &mut self.vertices {
-            vertex.translate(offset_x, offset_y, offset_z);
-        }
-    }
-    pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
-        for vertex in &mut self.vertices {
-            vertex.rotate(angle, axis);
-        }
-    }
-
-    pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 8]) {
-        for i in 0..8 {
-            self.vertices[i].tex_coords = tex_coords[i];
-        }
-    }
-
-    pub fn get_vertices(&self) -> &[Vertex; 8] {
-        &self.vertices
-    }
-    pub fn get_indices(&self) -> [u32; 36] {
-        self.indices
-    }
-}
-
-pub struct TriangularPyramid {
-    vertices: [Vertex; 4],
-    indices: [u32; 12],
-}
-
-impl TriangularPyramid {
-    pub fn regular(side: f32) -> Self {
-        let slant_height = (0.75 * side * side).sqrt();
-        let centroid_height = slant_height / 3.0;
-        let height = (slant_height * slant_height - centroid_height * centroid_height).sqrt();
-
-        let mut vertices = [
-            Vertex::new(0.0, 0.75 * height, 0.0),
-            Vertex::new(0.0, -0.25 * height, 2.0 * centroid_height),
-            Vertex::new(-side / 2.0, -0.25 * height, -centroid_height),
-            Vertex::new(side / 2.0, -0.25 * height, -centroid_height),
-        ];
-        let indices = [0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3];
-        let mut normals = [Vec3::zeros(); 4];
-
-        for i in 0..4 {
-            let main_vertex = vertices[indices[i * 3] as usize];
-            let v1 = vertices[indices[i * 3 + 1] as usize];
-            let v2 = vertices[indices[i * 3 + 2] as usize];
-            let normal = normalize(&cross(
-                &(v1.pos - main_vertex.pos),
-                &(v2.pos - main_vertex.pos),
-            ));
-            normals[indices[i * 3] as usize] += normal;
-            normals[indices[i * 3 + 1] as usize] += normal;
-            normals[indices[i * 3 + 2] as usize] += normal;
-        }
-        for i in 0..4 {
-            vertices[i].normal = normals[i] / 3.0;
-        }
-
-        TriangularPyramid { vertices, indices }
-    }
-
-    pub fn translate(&mut self, offset_x: f32, offset_y: f32, offset_z: f32) {
-        for vertex in &mut self.vertices {
-            vertex.translate(offset_x, offset_y, offset_z);
-        }
-    }
-    pub fn rotate(&mut self, angle: f32, axis: &Vec3) {
-        for vertex in &mut self.vertices {
-            vertex.rotate(angle, axis);
-        }
-    }
-
-    pub fn tex_coords_from_vectors(&mut self, tex_coords: [Vec2; 4]) {
-        for i in 0..4 {
-            self.vertices[i].tex_coords = tex_coords[i];
-        }
-    }
-
-    pub fn get_vertices(&self) -> [Vertex; 4] {
-        self.vertices
-    }
-
-    pub fn get_indices(&self) -> [u32; 12] {
-        self.indices
+        let cube = Mesh {
+            vertices,
+            indices,
+            material: Material::new(vec![], vec![], 128.0),
+            vao,
+            vbo,
+            ebo,
+        };
+        cube.setup_mesh();
+        cube
     }
 }

@@ -3,7 +3,6 @@ use russimp::material;
 use russimp::mesh;
 use russimp::node::Node;
 use russimp::scene::{PostProcess, Scene};
-// use russimp::;
 use russimp::Vector3D;
 use std::ops::Deref;
 use std::{
@@ -12,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    meshes::{Mesh, Vertex},
+    meshes::{Draw, Mesh, Vertex},
     shaders::ShaderProgram,
     textures::{Material, Texture, TextureType},
 };
@@ -39,11 +38,6 @@ impl Model {
         };
         model.load_model(path);
         model
-    }
-    pub fn draw(&self, shader: &ShaderProgram) {
-        for mesh in &self.meshes {
-            mesh.draw(shader);
-        }
     }
     fn load_model(&mut self, path: &'static Path) {
         let scene = Scene::from_file(
@@ -100,12 +94,12 @@ impl Model {
         diffuse_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Diffuse,
-            TextureType::diffuse,
+            TextureType::Diffuse,
         );
         specular_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Specular,
-            TextureType::specular,
+            TextureType::Specular,
         );
         let shininess = self.load_shininess(&m_material);
 
@@ -131,7 +125,7 @@ impl Model {
     ) -> Vec<Texture> {
         let mut textures = vec![];
         'properties_loop: for property in &mat.properties {
-            if property.semantic == ttype {
+            if property.semantic == ttype && property.key == "$tex.file" {
                 let dir_path = Path::new(&self.directory);
                 if let material::PropertyTypeInfo::String(data_string) = &property.data {
                     let tex_path = Path::new(data_string);
@@ -149,5 +143,13 @@ impl Model {
             }
         }
         textures
+    }
+}
+
+impl Draw for Model {
+    fn draw(&self, shader: &ShaderProgram) {
+        for mesh in &self.meshes {
+            mesh.draw(shader);
+        }
     }
 }

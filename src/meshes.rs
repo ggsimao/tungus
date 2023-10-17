@@ -15,6 +15,10 @@ use crate::{
     textures::Texture,
 };
 
+pub trait Draw {
+    fn draw(&self, shader: &ShaderProgram);
+}
+
 #[derive(Debug, Default)]
 #[repr(C)]
 pub struct Vertex {
@@ -132,23 +136,6 @@ impl Mesh {
         }
     }
 
-    pub fn draw(&self, shader: &ShaderProgram) {
-        shader.set_material("material", &self.material);
-        unsafe {
-            glActiveTexture(GL_TEXTURE0);
-        }
-        self.vao.bind();
-        unsafe {
-            glDrawElements(
-                GL_TRIANGLES,
-                self.indices.len() as i32,
-                GL_UNSIGNED_INT,
-                std::ptr::null(),
-            );
-        }
-        VertexArray::clear_binding();
-    }
-
     pub fn cube(side: f32) -> Self {
         let vao = VertexArray::new().expect("Couldn't make a VAO");
         let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
@@ -202,5 +189,24 @@ impl Mesh {
         };
         cube.setup_mesh();
         cube
+    }
+}
+
+impl Draw for Mesh {
+    fn draw(&self, shader: &ShaderProgram) {
+        shader.set_material("material", &self.material);
+        unsafe {
+            glActiveTexture(GL_TEXTURE0);
+        }
+        self.vao.bind();
+        unsafe {
+            glDrawElements(
+                GL_TRIANGLES,
+                self.indices.len() as i32,
+                GL_UNSIGNED_INT,
+                std::ptr::null(),
+            );
+        }
+        VertexArray::clear_binding();
     }
 }

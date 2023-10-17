@@ -201,7 +201,7 @@ impl ShaderProgram {
             }
             tex_count += 1;
             diffuse.bind();
-            let name = format!("{}.diffuse[{}]", material_name, i);
+            let name = format!("{}.Diffuse[{}]", material_name, i);
             self.set_1i(&name, (diffuse.get_id() - 1) as i32);
         }
         for (i, specular) in value.get_specular_maps().iter().enumerate() {
@@ -210,7 +210,7 @@ impl ShaderProgram {
             }
             tex_count += 1;
             specular.bind();
-            let name = format!("{}.specular[{}]", material_name, i);
+            let name = format!("{}.Specular[{}]", material_name, i);
             self.set_1i(&name, (specular.get_id() - 1) as i32);
         }
         self.set_1f(

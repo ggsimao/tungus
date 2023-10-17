@@ -19,10 +19,11 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use lighting::{DirectionalLight, PointLight, Spotlight};
-use meshes::{Mesh, Vertex};
+use meshes::{Draw, Mesh, Vertex};
 use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
+use russimp::light::Light;
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{ffi::c_void, path::Path};
 use textures::{Material, Texture, TextureType};
@@ -38,7 +39,7 @@ pub mod textures;
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
 const FRAG_SHADER_COLOR: &str = "./src/shaders/color_frag_shader.fs";
-const FRAG_SHADER_RAINBOW: &str = "./src/shaders/rainbow_frag_shader.fs";
+const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
 const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
 
@@ -47,12 +48,85 @@ const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
 const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.png";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 
+struct Lighting {
+    pub dir: DirectionalLight,
+    pub point: Vec<PointLight>,
+    pub spot: Spotlight,
+}
+
+fn draw_outline<T: Draw>(object: &T, shader: &ShaderProgram, camera: &Camera) {
+    unsafe {
+        glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+        glStencilMask(0x00);
+        glDisable(GL_DEPTH_TEST);
+    }
+
+    shader.use_program();
+    shader.set_view(camera);
+
+    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
+    let model = scaling(&vec3(1.1, 1.1, 1.1));
+    let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
+
+    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
+    shader.set_matrix_4fv("modelMatrix", model.as_ptr());
+    shader.set_matrix_3fv("normalMatrix", normal.as_ptr());
+    object.draw(shader);
+}
+
+fn draw_object<T: Draw>(object: &T, shader: &ShaderProgram, camera: &Camera, lighting: &Lighting) {
+    unsafe {
+        glStencilFunc(GL_ALWAYS, 1, 0xFF);
+        glStencilMask(0xFF);
+    }
+    shader.use_program();
+    shader.set_view(&camera);
+
+    shader.set_directional_light("dirLight", &lighting.dir);
+
+    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
+    let model = Mat4::identity();
+    let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
+
+    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
+    shader.set_matrix_4fv("modelMatrix", model.as_ptr());
+    shader.set_matrix_3fv("normalMatrix", normal.as_ptr());
+    for (i, point) in lighting.point.iter().enumerate() {
+        shader.set_point_light(format!("pointLights[{}]", i).as_str(), &point);
+    }
+    shader.set_spotlight("spotlight", &lighting.spot);
+    object.draw(&shader);
+}
+
+fn draw_lamps<T: Draw>(objects: &Vec<T>, shader: &ShaderProgram, camera: &Camera) {
+    let lamp_positions = [
+        vec3(0.0, 2.0, 0.0),
+        vec3(-1.0, -2.0, -1.0),
+        vec3(1.0, 0.0, 1.0),
+        vec3(0.0, -5.0, 0.0),
+    ];
+    let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
+    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
+    shader.use_program();
+    shader.set_view(&camera);
+    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
+    for i in 0..4 {
+        let lamp_trans = translation(&lamp_positions[i]);
+        let lamp_model = lamp_trans * lamp_scale;
+
+        shader.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
+
+        objects[i].draw(&shader);
+    }
+}
+
 fn main() {
     let sdl = SDL::init(InitFlags::Everything).expect("couldn't start SDL");
     sdl.gl_set_attribute(SdlGlAttr::MajorVersion, 3).unwrap();
     sdl.gl_set_attribute(SdlGlAttr::MinorVersion, 3).unwrap();
     sdl.gl_set_attribute(SdlGlAttr::Profile, GlProfile::Core)
         .unwrap();
+    sdl.gl_set_attribute(SdlGlAttr::StencilSize, 8).unwrap();
 
     let win = sdl
         .create_gl_window(
@@ -69,15 +143,15 @@ fn main() {
         let fun =
             |x: *const u8| win.get_proc_address(x as *const i8) as *const std::os::raw::c_void;
         load_global_gl(&fun);
+
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_STENCIL_TEST);
+        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     }
 
     let _ = sdl.set_relative_mouse_mode(true);
 
-    unsafe {
-        glEnable(GL_DEPTH_TEST);
-    }
-
-    let backpack = Model::new(Path::new("./src/resources/models/backpack.obj"));
+    let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
@@ -110,16 +184,24 @@ fn main() {
         20.0_f32.to_radians(),
     );
 
+    let mut lighting = Lighting {
+        dir: sun,
+        point: Vec::from(lamps),
+        spot: flashlight,
+    };
+
     let mut lamp_meshes: Vec<Mesh> = Vec::new();
     for _ in 0..4 {
         let cube = Mesh::cube(1.0);
         lamp_meshes.push(cube);
     }
 
-    let shader_program_cube =
+    let shader_program_model =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_COLOR).unwrap();
     let shader_program_lamp =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
+    let shader_program_outline =
+        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
 
     rendering::polygon_mode(PolygonMode::Fill);
 
@@ -175,50 +257,28 @@ fn main() {
         main_camera.translate_longitudinal(side_delta);
         main_camera.translate_forward(walk_delta);
         main_camera.translate_vertical(ascend_delta);
-        flashlight.phi = phi * flashlight_on as i32 as f32;
-        flashlight.gamma = gamma * flashlight_on as i32 as f32;
-        flashlight.pos = main_camera.get_pos();
-        flashlight.dir = main_camera.get_dir();
+        lighting.spot.phi = phi * flashlight_on as i32 as f32;
+        lighting.spot.gamma = gamma * flashlight_on as i32 as f32;
+        lighting.spot.pos = main_camera.get_pos();
+        lighting.spot.dir = main_camera.get_dir();
 
         unsafe {
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         }
+
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
         // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
-        let lamp_positions = [
-            vec3(0.0, 2.0, 0.0),
-            vec3(-1.0, -2.0, -1.0),
-            vec3(1.0, 0.0, 1.0),
-            vec3(0.0, -10.0, 0.0),
-        ];
-        let projection = perspective(1.0, main_camera.get_fov(), 0.1, 100.0);
-        shader_program_cube.use_program();
-        shader_program_cube.set_view(&main_camera);
-        shader_program_cube.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-        shader_program_cube.set_directional_light("dirLight", &sun);
 
-        let model = Mat4::identity();
-        let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
+        draw_lamps(&lamp_meshes, &shader_program_lamp, &main_camera);
 
-        shader_program_cube.set_matrix_4fv("modelMatrix", model.as_ptr());
-        shader_program_cube.set_matrix_3fv("normalMatrix", normal.as_ptr());
-        for i in 0..4 {
-            shader_program_cube.set_point_light(format!("pointLights[{}]", i).as_str(), &lamps[i]);
-        }
-        shader_program_cube.set_spotlight("spotlight", &flashlight);
-        backpack.draw(&shader_program_cube);
+        draw_object(&backpack, &shader_program_model, &main_camera, &lighting);
 
-        let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
-        shader_program_lamp.use_program();
-        shader_program_lamp.set_view(&main_camera);
-        shader_program_lamp.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-        for i in 0..4 {
-            let lamp_trans = translation(&lamp_positions[i]);
-            let lamp_model = lamp_trans * lamp_scale;
+        draw_outline(&backpack, &shader_program_outline, &main_camera);
 
-            shader_program_lamp.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
-
-            lamp_meshes[i].draw(&shader_program_lamp);
+        unsafe {
+            glStencilMask(0xFF);
+            glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            glEnable(GL_DEPTH_TEST);
         }
 
         win.swap_window();

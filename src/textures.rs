@@ -10,8 +10,8 @@ use std::path::Path;
 
 #[derive(Copy, Clone, Debug)]
 pub enum TextureType {
-    diffuse,
-    specular,
+    Diffuse,
+    Specular,
 }
 
 #[derive(Clone, Debug)]

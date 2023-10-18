@@ -151,7 +151,12 @@ fn main() {
 
     let _ = sdl.set_relative_mouse_mode(true);
 
-    let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
+    // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
+    let mut square = Mesh::square(1.0);
+    let mut grass_tex = Texture::new(TextureType::Diffuse);
+    grass_tex.load(Path::new("./src/resources/textures/grass.png"));
+    grass_tex.set_wrapping(GL_CLAMP_TO_EDGE);
+    square.material = Material::new(vec![grass_tex], vec![], 1.0);
 
     rendering::clear_color(0.2, 0.3, 0.3, 1.0);
 
@@ -173,7 +178,7 @@ fn main() {
 
     let (phi, gamma) = (15.0_f32.to_radians(), 20.0_f32.to_radians());
 
-    let mut flashlight = Spotlight::new(
+    let flashlight = Spotlight::new(
         main_camera.get_pos(),
         main_camera.get_dir(),
         ambient / 2.0,
@@ -271,9 +276,9 @@ fn main() {
 
         draw_lamps(&lamp_meshes, &shader_program_lamp, &main_camera);
 
-        draw_object(&backpack, &shader_program_model, &main_camera, &lighting);
+        draw_object(&square, &shader_program_model, &main_camera, &lighting);
 
-        draw_outline(&backpack, &shader_program_outline, &main_camera);
+        draw_outline(&square, &shader_program_outline, &main_camera);
 
         unsafe {
             glStencilMask(0xFF);

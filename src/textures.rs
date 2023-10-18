@@ -54,7 +54,7 @@ impl Texture {
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                GL_RGB.0 as i32,
+                GL_RGBA.0 as i32,
                 width,
                 height,
                 0,

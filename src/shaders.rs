@@ -194,8 +194,10 @@ impl ShaderProgram {
         unsafe { glUniformMatrix3fv(location, 1, 0, value) }
     }
     pub fn set_material(&self, material_name: &str, value: &Material) {
+        let diffuse_vector = value.get_diffuse_maps();
+        let specular_vector = value.get_specular_maps();
         let mut tex_count = 0;
-        for (i, diffuse) in value.get_diffuse_maps().iter().enumerate() {
+        for (i, diffuse) in diffuse_vector.iter().enumerate() {
             unsafe {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
@@ -204,7 +206,7 @@ impl ShaderProgram {
             let name = format!("{}.Diffuse[{}]", material_name, i);
             self.set_1i(&name, (diffuse.get_id() - 1) as i32);
         }
-        for (i, specular) in value.get_specular_maps().iter().enumerate() {
+        for (i, specular) in specular_vector.iter().enumerate() {
             unsafe {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
@@ -216,6 +218,14 @@ impl ShaderProgram {
         self.set_1f(
             &format!("{}.shininess", material_name),
             value.get_shininess(),
+        );
+        self.set_1i(
+            &format!("{}.loadedDiffuse", material_name),
+            diffuse_vector.len().max(1) as i32,
+        );
+        self.set_1i(
+            &format!("{}.loadedSpecular", material_name),
+            specular_vector.len().max(1) as i32,
         );
     }
     pub fn set_directional_light(&self, name: &str, value: &DirectionalLight) {

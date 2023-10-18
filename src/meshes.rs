@@ -182,13 +182,49 @@ impl Mesh {
         let cube = Mesh {
             vertices,
             indices,
-            material: Material::new(vec![], vec![], 128.0),
+            material: Material::new(vec![], vec![], 1.0),
             vao,
             vbo,
             ebo,
         };
         cube.setup_mesh();
         cube
+    }
+
+    pub fn square(side: f32) -> Self {
+        let vao = VertexArray::new().expect("Couldn't make a VAO");
+        let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
+        let ebo = Buffer::new().expect("Couldn't make the indices buffer");
+
+        let mut vertices = vec![
+            Vertex::new(-side / 2.0, side / 2.0, 0.0),
+            Vertex::new(side / 2.0, side / 2.0, 0.0),
+            Vertex::new(-side / 2.0, -side / 2.0, 0.0),
+            Vertex::new(side / 2.0, -side / 2.0, 0.0),
+        ];
+        let indices = vec![0, 2, 1, 1, 2, 3];
+
+        let main_vertex = vertices[indices[0] as usize];
+        let v1 = vertices[indices[1] as usize];
+        let v2 = vertices[indices[2] as usize];
+        let normal = normalize(&cross(
+            &(v1.pos - main_vertex.pos),
+            &(v2.pos - main_vertex.pos),
+        ));
+        for i in 0..4 {
+            vertices[i].normal = normal;
+            vertices[i].tex_coords = vec2((i % 2) as f32, (i as i32 / -2 + 1) as f32);
+        }
+        let square = Mesh {
+            vertices,
+            indices,
+            material: Material::new(vec![], vec![], 1.0),
+            vao,
+            vbo,
+            ebo,
+        };
+        square.setup_mesh();
+        square
     }
 }
 

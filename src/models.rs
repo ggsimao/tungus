@@ -66,10 +66,10 @@ impl Model {
         let mut diffuse_maps: Vec<Texture> = vec![];
         let mut specular_maps: Vec<Texture> = vec![];
 
-        let mut loaded_vertices = &mesh.vertices;
-        let mut loaded_normals = &mesh.normals;
+        let loaded_vertices = &mesh.vertices;
+        let loaded_normals = &mesh.normals;
         let standard_vec: Vec<Vector3D> = vec![];
-        let mut loaded_tex_coords = mesh.texture_coords[0].as_ref().unwrap_or(&standard_vec);
+        let loaded_tex_coords = mesh.texture_coords[0].as_ref().unwrap_or(&standard_vec);
 
         for (i, loaded_vertex) in loaded_vertices.iter().enumerate() {
             let mut vertex = Vertex::new(loaded_vertex.x, loaded_vertex.y, loaded_vertex.z);

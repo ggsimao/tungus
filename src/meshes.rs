@@ -246,3 +246,13 @@ impl Draw for Mesh {
         VertexArray::clear_binding();
     }
 }
+
+impl Clone for Mesh {
+    fn clone(&self) -> Self {
+        Mesh::new(
+            self.vertices.clone(),
+            self.indices.clone(),
+            self.material.clone(),
+        )
+    }
+}

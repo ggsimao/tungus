@@ -36,11 +36,6 @@ impl Texture {
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
         let path_string = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let format = if path.extension().unwrap() == "png" {
-            GL_RGBA
-        } else {
-            GL_RGB
-        };
         unsafe {
             glBindTexture(GL_TEXTURE_2D, self.id);
             stbi_set_flip_vertically_on_load(1);
@@ -51,6 +46,10 @@ impl Texture {
                 &mut nr_channels,
                 0,
             );
+            let format = match nr_channels {
+                4 => GL_RGBA,
+                _ => GL_RGB,
+            };
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,

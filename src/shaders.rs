@@ -3,6 +3,7 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::vec3;
+use nalgebra_glm::*;
 use std::ffi::CString;
 use std::path::Path;
 
@@ -177,21 +178,21 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniform1f(location, value) }
     }
-    pub fn set_4f(&self, name: &str, value: [f32; 4]) {
+    pub fn set_4f(&self, name: &str, value: &Vec4) {
         let location = self.get_uniform_location(name);
-        unsafe { glUniform4f(location, value[0], value[1], value[2], value[3]) }
+        unsafe { glUniform4f(location, value.x, value.y, value.z, value.w) }
     }
-    pub fn set_3f(&self, name: &str, value: [f32; 3]) {
+    pub fn set_3f(&self, name: &str, value: &Vec3) {
         let location = self.get_uniform_location(name);
-        unsafe { glUniform3f(location, value[0], value[1], value[2]) }
+        unsafe { glUniform3f(location, value.x, value.y, value.z) }
     }
-    pub fn set_matrix_4fv(&self, name: &str, value: *const f32) {
+    pub fn set_matrix_4fv(&self, name: &str, value: &Mat4) {
         let location = self.get_uniform_location(name);
-        unsafe { glUniformMatrix4fv(location, 1, 0, value) }
+        unsafe { glUniformMatrix4fv(location, 1, 0, value.as_ptr()) }
     }
-    pub fn set_matrix_3fv(&self, name: &str, value: *const f32) {
+    pub fn set_matrix_3fv(&self, name: &str, value: &Mat3) {
         let location = self.get_uniform_location(name);
-        unsafe { glUniformMatrix3fv(location, 1, 0, value) }
+        unsafe { glUniformMatrix3fv(location, 1, 0, value.as_ptr()) }
     }
     pub fn set_material(&self, material_name: &str, value: &Material) {
         let diffuse_vector = value.get_diffuse_maps();
@@ -229,34 +230,34 @@ impl ShaderProgram {
         );
     }
     pub fn set_directional_light(&self, name: &str, value: &DirectionalLight) {
-        self.set_3f(format!("{}.direction", name).as_str(), value.dir.into());
-        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
-        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
-        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+        self.set_3f(format!("{}.direction", name).as_str(), &value.dir);
+        self.set_3f(format!("{}.ambient", name).as_str(), &value.amb);
+        self.set_3f(format!("{}.diffuse", name).as_str(), &value.diff);
+        self.set_3f(format!("{}.specular", name).as_str(), &value.spec);
     }
     pub fn set_point_light(&self, name: &str, value: &PointLight) {
-        self.set_3f(format!("{}.position", name).as_str(), value.pos.into());
+        self.set_3f(format!("{}.position", name).as_str(), &value.pos);
         self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
         self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
         self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
-        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
-        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
-        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+        self.set_3f(format!("{}.ambient", name).as_str(), &value.amb);
+        self.set_3f(format!("{}.diffuse", name).as_str(), &value.diff);
+        self.set_3f(format!("{}.specular", name).as_str(), &value.spec);
     }
     pub fn set_spotlight(&self, name: &str, value: &Spotlight) {
-        self.set_3f(format!("{}.position", name).as_str(), value.pos.into());
-        self.set_3f(format!("{}.direction", name).as_str(), value.dir.into());
+        self.set_3f(format!("{}.position", name).as_str(), &value.pos);
+        self.set_3f(format!("{}.direction", name).as_str(), &value.dir);
         self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
         self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
         self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
-        self.set_3f(format!("{}.ambient", name).as_str(), value.amb.into());
-        self.set_3f(format!("{}.diffuse", name).as_str(), value.diff.into());
-        self.set_3f(format!("{}.specular", name).as_str(), value.spec.into());
+        self.set_3f(format!("{}.ambient", name).as_str(), &value.amb);
+        self.set_3f(format!("{}.diffuse", name).as_str(), &value.diff);
+        self.set_3f(format!("{}.specular", name).as_str(), &value.spec);
         self.set_1f(format!("{}.phiCos", name).as_str(), value.phi.cos());
         self.set_1f(format!("{}.gammaCos", name).as_str(), value.gamma.cos());
     }
     pub fn set_view(&self, camera: &Camera) {
-        self.set_matrix_4fv("viewMatrix", camera.look_at().as_ptr());
-        self.set_3f("viewPos", camera.get_pos().into());
+        self.set_matrix_4fv("viewMatrix", &camera.look_at());
+        self.set_3f("viewPos", &camera.get_pos());
     }
 }

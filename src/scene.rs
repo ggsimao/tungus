@@ -63,7 +63,6 @@ impl SceneObject {
 
         shader.set_matrix_4fv("modelMatrix", &scale(&self.model, &vec3(1.1, 1.1, 1.1)));
         shader.set_3f("outlineColor", &self.outline.xyz());
-        // shader.set_matrix_3fv("normalMatrix", &self.normal);
         self.drawable.draw(shader);
 
         unsafe {

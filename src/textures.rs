@@ -63,6 +63,7 @@ impl Texture {
             );
             glGenerateMipmap(GL_TEXTURE_2D);
             stbi_image_free(data as *mut c_void);
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
         self.path = path.display().to_string();
     }
@@ -70,6 +71,12 @@ impl Texture {
     pub fn bind(&self) {
         unsafe {
             glBindTexture(GL_TEXTURE_2D, self.id);
+        }
+    }
+
+    pub fn clear_binding(&self) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
 

@@ -49,6 +49,8 @@ const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
 const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.png";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
+const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
+const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
 
 struct Lighting {
     pub dir: DirectionalLight,
@@ -162,7 +164,7 @@ fn main() {
     // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
     let mut grass_mesh = Mesh::square(1.0);
     let mut grass_tex = Texture::new(TextureType::Diffuse);
-    grass_tex.load(Path::new("./src/resources/textures/grass.png"));
+    grass_tex.load(Path::new(GRASS_TEXTURE));
     grass_tex.set_wrapping(GL_CLAMP_TO_EDGE);
     grass_mesh.material = Material::new(vec![grass_tex], vec![], 1.0);
     let mut grass: SceneObject = SceneObject::from(grass_mesh);
@@ -172,9 +174,7 @@ fn main() {
 
     let mut window_mesh = Mesh::square(1.0);
     let mut window_tex = Texture::new(TextureType::Diffuse);
-    window_tex.load(Path::new(
-        "./src/resources/textures/blending_transparent_window.png",
-    ));
+    window_tex.load(Path::new(WINDOW_TEXTURE));
     window_tex.set_wrapping(GL_CLAMP_TO_EDGE);
     window_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
     let mut window1 = SceneObject::from(window_mesh.clone());

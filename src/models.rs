@@ -63,8 +63,6 @@ impl Model {
     fn process_mesh(&mut self, mesh: &mesh::Mesh, scene: &Scene) -> Mesh {
         let mut vertices: Vec<Vertex> = vec![];
         let mut indices: Vec<u32> = vec![];
-        let mut diffuse_maps: Vec<Texture> = vec![];
-        let mut specular_maps: Vec<Texture> = vec![];
 
         let loaded_vertices = &mesh.vertices;
         let loaded_normals = &mesh.normals;
@@ -91,12 +89,12 @@ impl Model {
         }
 
         let m_material = &scene.materials[mesh.material_index as usize];
-        diffuse_maps = self.load_material_textures(
+        let diffuse_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Diffuse,
             TextureType::Diffuse,
         );
-        specular_maps = self.load_material_textures(
+        let specular_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Specular,
             TextureType::Specular,

@@ -36,11 +36,6 @@ impl Texture {
     pub fn load(&mut self, path: &Path) {
         let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
         let path_string = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let format = if path.extension().unwrap() == "png" {
-            GL_RGBA
-        } else {
-            GL_RGB
-        };
         unsafe {
             glBindTexture(GL_TEXTURE_2D, self.id);
             stbi_set_flip_vertically_on_load(1);
@@ -51,10 +46,14 @@ impl Texture {
                 &mut nr_channels,
                 0,
             );
+            let format = match nr_channels {
+                4 => GL_RGBA,
+                _ => GL_RGB,
+            };
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                GL_RGB.0 as i32,
+                GL_RGBA.0 as i32,
                 width,
                 height,
                 0,
@@ -64,6 +63,7 @@ impl Texture {
             );
             glGenerateMipmap(GL_TEXTURE_2D);
             stbi_image_free(data as *mut c_void);
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
         self.path = path.display().to_string();
     }
@@ -71,6 +71,12 @@ impl Texture {
     pub fn bind(&self) {
         unsafe {
             glBindTexture(GL_TEXTURE_2D, self.id);
+        }
+    }
+
+    pub fn clear_binding(&self) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
 

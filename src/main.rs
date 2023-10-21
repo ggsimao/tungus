@@ -24,6 +24,7 @@ use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
 use russimp::light::Light;
+use scene::SceneObject;
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{ffi::c_void, path::Path};
 use textures::{Material, Texture, TextureType};
@@ -34,19 +35,21 @@ pub mod lighting;
 pub mod meshes;
 pub mod models;
 pub mod rendering;
+pub mod scene;
 pub mod shaders;
 pub mod textures;
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
-const FRAG_SHADER_COLOR: &str = "./src/shaders/color_frag_shader.fs";
+const FRAG_SHADER_OBJECT: &str = "./src/shaders/object_frag_shader.fs";
 const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
-const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
 const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.png";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
+const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
+const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
 
 struct Lighting {
     pub dir: DirectionalLight,
@@ -54,48 +57,50 @@ struct Lighting {
     pub spot: Spotlight,
 }
 
-fn draw_outline<T: Draw>(object: &T, shader: &ShaderProgram, camera: &Camera) {
-    unsafe {
-        glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-        glStencilMask(0x00);
-        glDisable(GL_DEPTH_TEST);
+fn draw_scene(
+    scene: &Vec<&SceneObject>,
+    object_shader: &ShaderProgram,
+    outline_shader: &ShaderProgram,
+    camera: &Camera,
+    lighting: &Lighting,
+) {
+    let projection = &perspective(1.0, camera.get_fov(), 0.1, 100.0);
+    let reinitialize_object_shader = || {
+        object_shader.use_program();
+        object_shader.set_view(&camera);
+
+        object_shader.set_directional_light("dirLight", &lighting.dir);
+        object_shader.set_matrix_4fv("projectionMatrix", projection);
+        for (i, point) in lighting.point.iter().enumerate() {
+            object_shader.set_point_light(format!("pointLights[{}]", i).as_str(), &point);
+        }
+        object_shader.set_spotlight("spotlight", &lighting.spot);
+    };
+    let reinitialize_outline_shader = || {
+        outline_shader.use_program();
+        outline_shader.set_view(&camera);
+        outline_shader.set_matrix_4fv("projectionMatrix", projection);
+    };
+
+    let mut ordered_scene = scene.clone();
+
+    let distance_compare = |a: &&SceneObject, b: &&SceneObject| {
+        let distance_a = length(&(camera.get_pos() - a.get_pos()));
+        let distance_b = length(&(camera.get_pos() - b.get_pos()));
+        distance_b.partial_cmp(&distance_a).unwrap()
+    };
+
+    ordered_scene.sort_by(distance_compare);
+
+    reinitialize_object_shader();
+    for object in ordered_scene {
+        object.draw(&object_shader);
+        if object.has_outline() {
+            reinitialize_outline_shader();
+            object.draw_outline(&outline_shader);
+            reinitialize_object_shader();
+        }
     }
-
-    shader.use_program();
-    shader.set_view(camera);
-
-    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
-    let model = scaling(&vec3(1.1, 1.1, 1.1));
-    let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
-
-    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-    shader.set_matrix_4fv("modelMatrix", model.as_ptr());
-    shader.set_matrix_3fv("normalMatrix", normal.as_ptr());
-    object.draw(shader);
-}
-
-fn draw_object<T: Draw>(object: &T, shader: &ShaderProgram, camera: &Camera, lighting: &Lighting) {
-    unsafe {
-        glStencilFunc(GL_ALWAYS, 1, 0xFF);
-        glStencilMask(0xFF);
-    }
-    shader.use_program();
-    shader.set_view(&camera);
-
-    shader.set_directional_light("dirLight", &lighting.dir);
-
-    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
-    let model = Mat4::identity();
-    let normal = mat4_to_mat3(&model.try_inverse().unwrap().transpose());
-
-    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
-    shader.set_matrix_4fv("modelMatrix", model.as_ptr());
-    shader.set_matrix_3fv("normalMatrix", normal.as_ptr());
-    for (i, point) in lighting.point.iter().enumerate() {
-        shader.set_point_light(format!("pointLights[{}]", i).as_str(), &point);
-    }
-    shader.set_spotlight("spotlight", &lighting.spot);
-    object.draw(&shader);
 }
 
 fn draw_lamps<T: Draw>(objects: &Vec<T>, shader: &ShaderProgram, camera: &Camera) {
@@ -109,12 +114,12 @@ fn draw_lamps<T: Draw>(objects: &Vec<T>, shader: &ShaderProgram, camera: &Camera
     let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
     shader.use_program();
     shader.set_view(&camera);
-    shader.set_matrix_4fv("projectionMatrix", projection.as_ptr());
+    shader.set_matrix_4fv("projectionMatrix", &projection);
     for i in 0..4 {
         let lamp_trans = translation(&lamp_positions[i]);
         let lamp_model = lamp_trans * lamp_scale;
 
-        shader.set_matrix_4fv("modelMatrix", lamp_model.as_ptr());
+        shader.set_matrix_4fv("modelMatrix", &lamp_model);
 
         objects[i].draw(&shader);
     }
@@ -131,9 +136,9 @@ fn main() {
     let win = sdl
         .create_gl_window(
             WINDOW_TITLE,
-            WindowPosition::XY(1000, 100),
-            800,
-            800,
+            WindowPosition::XY(500, 50),
+            600,
+            600,
             WindowFlags::Shown,
         )
         .expect("couldn't make a window and context");
@@ -146,14 +151,40 @@ fn main() {
 
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     }
 
     let _ = sdl.set_relative_mouse_mode(true);
 
-    let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
+    let mut scene: Vec<&SceneObject> = vec![];
 
-    rendering::clear_color(0.2, 0.3, 0.3, 1.0);
+    // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
+    let mut grass_mesh = Mesh::square(1.0);
+    let mut grass_tex = Texture::new(TextureType::Diffuse);
+    grass_tex.load(Path::new(GRASS_TEXTURE));
+    grass_tex.set_wrapping(GL_CLAMP_TO_EDGE);
+    grass_mesh.material = Material::new(vec![grass_tex], vec![], 1.0);
+    let mut grass: SceneObject = SceneObject::from(grass_mesh);
+    grass.set_outline(vec3(0.04, 0.28, 0.26));
+    grass.enable_outline(true);
+    scene.push(&grass);
+
+    let mut window_mesh = Mesh::square(1.0);
+    let mut window_tex = Texture::new(TextureType::Diffuse);
+    window_tex.load(Path::new(WINDOW_TEXTURE));
+    window_tex.set_wrapping(GL_CLAMP_TO_EDGE);
+    window_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
+    let mut window1 = SceneObject::from(window_mesh.clone());
+    window1.translate(&vec3(0.0, 0.0, -1.0));
+    scene.push(&window1);
+
+    let mut window2 = SceneObject::from(window_mesh);
+    window2.translate(&vec3(0.0, 0.0, 1.0));
+    scene.push(&window2);
+
+    rendering::clear_color(0.2, 0.3, 0.3, 0.0);
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
 
@@ -173,7 +204,7 @@ fn main() {
 
     let (phi, gamma) = (15.0_f32.to_radians(), 20.0_f32.to_radians());
 
-    let mut flashlight = Spotlight::new(
+    let flashlight = Spotlight::new(
         main_camera.get_pos(),
         main_camera.get_dir(),
         ambient / 2.0,
@@ -197,7 +228,7 @@ fn main() {
     }
 
     let shader_program_model =
-        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_COLOR).unwrap();
+        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
     let shader_program_lamp =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
     let shader_program_outline =
@@ -271,15 +302,13 @@ fn main() {
 
         draw_lamps(&lamp_meshes, &shader_program_lamp, &main_camera);
 
-        draw_object(&backpack, &shader_program_model, &main_camera, &lighting);
-
-        draw_outline(&backpack, &shader_program_outline, &main_camera);
-
-        unsafe {
-            glStencilMask(0xFF);
-            glStencilFunc(GL_ALWAYS, 1, 0xFF);
-            glEnable(GL_DEPTH_TEST);
-        }
+        draw_scene(
+            &scene,
+            &shader_program_model,
+            &shader_program_outline,
+            &main_camera,
+            &lighting,
+        );
 
         win.swap_window();
     }

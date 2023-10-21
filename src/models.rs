@@ -63,13 +63,11 @@ impl Model {
     fn process_mesh(&mut self, mesh: &mesh::Mesh, scene: &Scene) -> Mesh {
         let mut vertices: Vec<Vertex> = vec![];
         let mut indices: Vec<u32> = vec![];
-        let mut diffuse_maps: Vec<Texture> = vec![];
-        let mut specular_maps: Vec<Texture> = vec![];
 
-        let mut loaded_vertices = &mesh.vertices;
-        let mut loaded_normals = &mesh.normals;
+        let loaded_vertices = &mesh.vertices;
+        let loaded_normals = &mesh.normals;
         let standard_vec: Vec<Vector3D> = vec![];
-        let mut loaded_tex_coords = mesh.texture_coords[0].as_ref().unwrap_or(&standard_vec);
+        let loaded_tex_coords = mesh.texture_coords[0].as_ref().unwrap_or(&standard_vec);
 
         for (i, loaded_vertex) in loaded_vertices.iter().enumerate() {
             let mut vertex = Vertex::new(loaded_vertex.x, loaded_vertex.y, loaded_vertex.z);
@@ -91,12 +89,12 @@ impl Model {
         }
 
         let m_material = &scene.materials[mesh.material_index as usize];
-        diffuse_maps = self.load_material_textures(
+        let diffuse_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Diffuse,
             TextureType::Diffuse,
         );
-        specular_maps = self.load_material_textures(
+        let specular_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Specular,
             TextureType::Specular,

@@ -40,9 +40,8 @@ pub mod shaders;
 pub mod textures;
 
 const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
-const FRAG_SHADER_COLOR: &str = "./src/shaders/color_frag_shader.fs";
+const FRAG_SHADER_OBJECT: &str = "./src/shaders/object_frag_shader.fs";
 const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
-const FRAG_SHADER_TEXTURE: &str = "./src/shaders/texture_frag_shader.fs";
 const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
@@ -137,9 +136,9 @@ fn main() {
     let win = sdl
         .create_gl_window(
             WINDOW_TITLE,
-            WindowPosition::XY(1000, 100),
-            800,
-            800,
+            WindowPosition::XY(500, 50),
+            600,
+            600,
             WindowFlags::Shown,
         )
         .expect("couldn't make a window and context");
@@ -185,7 +184,7 @@ fn main() {
     window2.translate(&vec3(0.0, 0.0, 1.0));
     scene.push(&window2);
 
-    rendering::clear_color(0.2, 0.3, 0.3, 1.0);
+    rendering::clear_color(0.2, 0.3, 0.3, 0.0);
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
 
@@ -229,7 +228,7 @@ fn main() {
     }
 
     let shader_program_model =
-        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_COLOR).unwrap();
+        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
     let shader_program_lamp =
         ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
     let shader_program_outline =

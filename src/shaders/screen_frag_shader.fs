@@ -5,6 +5,18 @@ out vec4 fragColor;
 
 uniform sampler2D screenTexture;
 
+const float offset = 1.0 / 300.0;
+
+const float kernel[3][3] = float[][](
+    float[](2,2,2),
+    float[](2,-15,2),
+    float[](2,2,2));
+
 void main() {
-    fragColor = texture(screenTexture, texCoords);
+    fragColor = vec4(0);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            fragColor += texture(screenTexture, texCoords.st + vec2(i-1, j-1) * offset) * kernel[i][j];
+        }
+    }
 }

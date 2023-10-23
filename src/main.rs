@@ -4,8 +4,6 @@
 #![allow(clippy::zero_ptr)]
 #![feature(offset_of)]
 
-const WINDOW_TITLE: &str = "Tungus";
-
 // use assimp;
 use beryllium::*;
 use camera::Camera;
@@ -22,7 +20,7 @@ use lighting::{DirectionalLight, PointLight, Spotlight};
 use meshes::{Draw, Mesh, Vertex};
 use models::Model;
 use nalgebra_glm::*;
-use rendering::{Buffer, BufferType, PolygonMode, VertexArray};
+use rendering::{Buffer, BufferType, Framebuffer, PolygonMode, VertexArray};
 use russimp::light::Light;
 use scene::SceneObject;
 use shaders::{Shader, ShaderProgram, ShaderType};
@@ -39,17 +37,23 @@ pub mod scene;
 pub mod shaders;
 pub mod textures;
 
-const VERT_SHADER: &str = "./src/shaders/vert_shader.vs";
+const REGULAR_VERT_SHADER: &str = "./src/shaders/regular_vert_shader.vs";
 const FRAG_SHADER_OBJECT: &str = "./src/shaders/object_frag_shader.fs";
 const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
-const FRAG_SHADER_LIGHT: &str = "./src/shaders/light_frag_shader.fs";
+
+const SCREEN_VERT_SHADER: &str = "./src/shaders/screen_vert_shader.vs";
+const SCREEN_FRAG_SHADER: &str = "./src/shaders/screen_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
 const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.png";
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
+const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
 const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
+
+const WINDOW_TITLE: &str = "Tungus";
+const WINDOW_SIZE: (u32, u32) = (600, 600);
 
 struct Lighting {
     pub dir: DirectionalLight,
@@ -57,13 +61,21 @@ struct Lighting {
     pub spot: Spotlight,
 }
 
-fn draw_scene(
-    scene: &Vec<&SceneObject>,
-    object_shader: &ShaderProgram,
-    outline_shader: &ShaderProgram,
-    camera: &Camera,
-    lighting: &Lighting,
-) {
+struct Scene<'a> {
+    pub objects: &'a Vec<&'a SceneObject>,
+    pub object_shader: &'a ShaderProgram,
+    pub outline_shader: &'a ShaderProgram,
+    pub camera: &'a Camera,
+    pub lighting: &'a Lighting,
+}
+
+fn draw_scene(scene: &Scene) {
+    let objects = scene.objects;
+    let object_shader = scene.object_shader;
+    let outline_shader = scene.outline_shader;
+    let camera = scene.camera;
+    let lighting = scene.lighting;
+
     let projection = &perspective(1.0, camera.get_fov(), 0.1, 100.0);
     let reinitialize_object_shader = || {
         object_shader.use_program();
@@ -82,7 +94,7 @@ fn draw_scene(
         outline_shader.set_matrix_4fv("projectionMatrix", projection);
     };
 
-    let mut ordered_scene = scene.clone();
+    let mut ordered_objects = objects.clone();
 
     let distance_compare = |a: &&SceneObject, b: &&SceneObject| {
         let distance_a = length(&(camera.get_pos() - a.get_pos()));
@@ -90,10 +102,11 @@ fn draw_scene(
         distance_b.partial_cmp(&distance_a).unwrap()
     };
 
-    ordered_scene.sort_by(distance_compare);
+    // Doesn't take into account different faces of the same object
+    ordered_objects.sort_by(distance_compare);
 
     reinitialize_object_shader();
-    for object in ordered_scene {
+    for object in ordered_objects {
         object.draw(&object_shader);
         if object.has_outline() {
             reinitialize_outline_shader();
@@ -103,26 +116,31 @@ fn draw_scene(
     }
 }
 
-fn draw_lamps<T: Draw>(objects: &Vec<T>, shader: &ShaderProgram, camera: &Camera) {
-    let lamp_positions = [
-        vec3(0.0, 2.0, 0.0),
-        vec3(-1.0, -2.0, -1.0),
-        vec3(1.0, 0.0, 1.0),
-        vec3(0.0, -5.0, 0.0),
-    ];
-    let lamp_scale = scaling(&vec3(0.1, 0.1, 0.1));
-    let projection = perspective(1.0, camera.get_fov(), 0.1, 100.0);
-    shader.use_program();
-    shader.set_view(&camera);
-    shader.set_matrix_4fv("projectionMatrix", &projection);
-    for i in 0..4 {
-        let lamp_trans = translation(&lamp_positions[i]);
-        let lamp_model = lamp_trans * lamp_scale;
-
-        shader.set_matrix_4fv("modelMatrix", &lamp_model);
-
-        objects[i].draw(&shader);
+fn draw_on_framebuffer(
+    fb: &Framebuffer,
+    screen: &Mesh,
+    screen_shader: &ShaderProgram,
+    scene: &Scene,
+) {
+    // rendering::clear_color(0.2, 0.3, 0.3, 0.0);
+    fb.bind();
+    unsafe {
+        glClearColor(0.1, 0.1, 0.1, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
     }
+    draw_scene(scene);
+
+    Framebuffer::clear_binding();
+    unsafe {
+        glClearColor(1.0, 1.0, 1.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+    }
+
+    screen_shader.use_program();
+    screen_shader.set_texture("screenTexture", fb.get_texture());
+    screen.draw(&screen_shader);
 }
 
 fn main() {
@@ -137,54 +155,46 @@ fn main() {
         .create_gl_window(
             WINDOW_TITLE,
             WindowPosition::XY(500, 50),
-            600,
-            600,
+            WINDOW_SIZE.0,
+            WINDOW_SIZE.1,
             WindowFlags::Shown,
         )
         .expect("couldn't make a window and context");
     win.set_swap_interval(SwapInterval::Vsync);
 
     unsafe {
-        let fun =
-            |x: *const u8| win.get_proc_address(x as *const i8) as *const std::os::raw::c_void;
+        let fun = |x: *const u8| win.get_proc_address(x as *const i8) as *const std::ffi::c_void;
         load_global_gl(&fun);
+    }
 
+    let framebuffer = Framebuffer::new().unwrap();
+    framebuffer.setup_with_renderbuffer(WINDOW_SIZE);
+
+    unsafe {
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
         glEnable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
     }
 
     let _ = sdl.set_relative_mouse_mode(true);
 
-    let mut scene: Vec<&SceneObject> = vec![];
+    let mut objects_list: Vec<&SceneObject> = vec![];
 
     // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
-    let mut grass_mesh = Mesh::square(1.0);
-    let mut grass_tex = Texture::new(TextureType::Diffuse);
-    grass_tex.load(Path::new(GRASS_TEXTURE));
-    grass_tex.set_wrapping(GL_CLAMP_TO_EDGE);
-    grass_mesh.material = Material::new(vec![grass_tex], vec![], 1.0);
-    let mut grass: SceneObject = SceneObject::from(grass_mesh);
-    grass.set_outline(vec3(0.04, 0.28, 0.26));
-    grass.enable_outline(true);
-    scene.push(&grass);
 
-    let mut window_mesh = Mesh::square(1.0);
+    let mut box_mesh = Mesh::cube(1.0);
     let mut window_tex = Texture::new(TextureType::Diffuse);
     window_tex.load(Path::new(WINDOW_TEXTURE));
     window_tex.set_wrapping(GL_CLAMP_TO_EDGE);
-    window_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
-    let mut window1 = SceneObject::from(window_mesh.clone());
-    window1.translate(&vec3(0.0, 0.0, -1.0));
-    scene.push(&window1);
+    box_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
+    let mut box_object = SceneObject::from(box_mesh);
+    // box_object.translate(&vec3(0.0, 0.0, -1.0));
+    objects_list.push(&box_object);
 
-    let mut window2 = SceneObject::from(window_mesh);
-    window2.translate(&vec3(0.0, 0.0, 1.0));
-    scene.push(&window2);
-
-    rendering::clear_color(0.2, 0.3, 0.3, 0.0);
+    let screen = Mesh::square(2.0);
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
 
@@ -221,18 +231,27 @@ fn main() {
         spot: flashlight,
     };
 
-    let mut lamp_meshes: Vec<Mesh> = Vec::new();
-    for _ in 0..4 {
-        let cube = Mesh::cube(1.0);
-        lamp_meshes.push(cube);
+    let mut lamp_mesh = Mesh::cube(1.0);
+    let mut lamp_texture = Texture::new(TextureType::Diffuse);
+    lamp_texture.load(Path::new(LAMP_TEXTURE));
+    lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 1.0);
+    let mut lamp_objects: Vec<SceneObject> = Vec::new();
+    for i in 0..lamps.len() {
+        let mut lamp_object = SceneObject::from(lamp_mesh.clone());
+        lamp_object.translate(&lamps[i].pos);
+        lamp_object.scale(0.1);
+        lamp_objects.push(lamp_object);
+    }
+    for i in 0..lamps.len() {
+        objects_list.push(&lamp_objects[i]);
     }
 
     let shader_program_model =
-        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
-    let shader_program_lamp =
-        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_LIGHT).unwrap();
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
     let shader_program_outline =
-        ShaderProgram::from_vert_frag(VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
+    let shader_program_screen =
+        ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap();
 
     rendering::polygon_mode(PolygonMode::Fill);
 
@@ -293,22 +312,18 @@ fn main() {
         lighting.spot.pos = main_camera.get_pos();
         lighting.spot.dir = main_camera.get_dir();
 
-        unsafe {
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        }
-
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
         // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
-        draw_lamps(&lamp_meshes, &shader_program_lamp, &main_camera);
+        let scene = Scene {
+            objects: &objects_list,
+            object_shader: &shader_program_model,
+            outline_shader: &shader_program_outline,
+            camera: &main_camera,
+            lighting: &lighting,
+        };
 
-        draw_scene(
-            &scene,
-            &shader_program_model,
-            &shader_program_outline,
-            &main_camera,
-            &lighting,
-        );
+        draw_on_framebuffer(&framebuffer, &screen, &shader_program_screen, &scene);
 
         win.swap_window();
     }

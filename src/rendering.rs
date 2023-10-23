@@ -1,3 +1,6 @@
+use std::ptr::null;
+
+use beryllium::GlWindow;
 use bytemuck::offset_of;
 use bytemuck::{NoUninit, Pod, Zeroable};
 use gl33::gl_core_types::*;
@@ -7,6 +10,7 @@ use gl33::global_loader::*;
 use nalgebra_glm::*;
 
 use crate::meshes::Vertex;
+use crate::textures::{Texture, TextureType};
 
 pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
     unsafe { glClearColor(r, g, b, a) }
@@ -42,12 +46,12 @@ pub enum BufferType {
 pub struct Buffer(pub u32);
 impl Buffer {
     pub fn new() -> Option<Self> {
-        let mut vbo = 0;
+        let mut bo = 0;
         unsafe {
-            glGenBuffers(1, &mut vbo);
+            glGenBuffers(1, &mut bo);
         }
-        if vbo != 0 {
-            Some(Self(vbo))
+        if bo != 0 {
+            Some(Self(bo))
         } else {
             None
         }
@@ -81,5 +85,185 @@ pub enum PolygonMode {
 }
 
 pub fn polygon_mode(mode: PolygonMode) {
-    unsafe { glPolygonMode(GL_FRONT_AND_BACK, GLenum(mode as u32)) };
+    unsafe { glPolygonMode(GL_FRONT, GLenum(mode as u32)) };
+}
+
+#[derive(Debug)]
+pub struct Framebuffer {
+    id: u32,
+    texture: Texture,
+    rbo: Renderbuffer,
+}
+
+impl Framebuffer {
+    pub fn new() -> Option<Self> {
+        let mut fbo = 0;
+        let texture = Texture::new(TextureType::Attachment);
+        let rbo = Renderbuffer::new().unwrap();
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+        }
+        if fbo != 0 {
+            Some(Self {
+                id: fbo,
+                texture,
+                rbo,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn check_status() -> GLenum {
+        unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }
+    }
+
+    pub fn setup_with_renderbuffer(&self, window_size: (u32, u32)) {
+        self.bind();
+        self.attach_texture(window_size);
+        self.attach_renderbuffer(window_size);
+        Self::clear_binding();
+    }
+
+    // If you want to render your whole screen to a texture of a smaller or larger size you need to
+    // call glViewport again (before rendering to your framebuffer) with the new dimensions
+    // of your texture, otherwise render commands will only fill part of the texture.
+    pub fn attach_texture(&self, window_size: (u32, u32)) {
+        self.texture.bind();
+        unsafe {
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGB.0 as i32,
+                window_size.0 as i32,
+                window_size.1 as i32,
+                0,
+                GL_RGB,
+                GL_UNSIGNED_BYTE,
+                null(),
+            );
+        }
+        self.texture.set_filters(GL_LINEAR, GL_LINEAR);
+        Texture::clear_binding();
+
+        unsafe {
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER,
+                GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_2D,
+                self.texture.get_id(),
+                0,
+            );
+        }
+    }
+
+    pub fn attach_depth_stencil(&self, window_size: (u32, u32)) {
+        self.texture.bind();
+        unsafe {
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_DEPTH24_STENCIL8.0 as i32,
+                window_size.0 as i32,
+                window_size.1 as i32,
+                0,
+                GL_DEPTH_STENCIL,
+                GL_UNSIGNED_INT_24_8,
+                null(),
+            );
+        }
+        Texture::clear_binding();
+        unsafe {
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER,
+                GL_DEPTH_STENCIL_ATTACHMENT,
+                GL_TEXTURE_2D,
+                self.texture.get_id(),
+                0,
+            );
+        }
+    }
+
+    pub fn attach_renderbuffer(&self, window_size: (u32, u32)) {
+        self.rbo.bind();
+        Renderbuffer::create_depth_stencil_storage(window_size);
+        Renderbuffer::clear_binding();
+        unsafe {
+            glFramebufferRenderbuffer(
+                GL_FRAMEBUFFER,
+                GL_DEPTH_STENCIL_ATTACHMENT,
+                GL_RENDERBUFFER,
+                self.rbo.get_id(),
+            );
+        }
+        if Self::check_status() != GL_FRAMEBUFFER_COMPLETE {
+            panic!("Could not complete framebuffer!")
+        }
+    }
+
+    pub fn bind(&self) {
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, self.id) }
+    }
+
+    pub fn clear_binding() {
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) }
+    }
+
+    pub fn get_texture(&self) -> &Texture {
+        &self.texture
+    }
+}
+
+impl Drop for Framebuffer {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteFramebuffers(1, &self.id);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Renderbuffer {
+    id: u32,
+}
+
+impl Renderbuffer {
+    pub fn new() -> Option<Self> {
+        let mut rbo = 0;
+        unsafe {
+            glGenRenderbuffers(1, &mut rbo);
+        }
+        if rbo != 0 {
+            Some(Self { id: rbo })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn bind(&self) {
+        unsafe { glBindRenderbuffer(GL_RENDERBUFFER, self.id) }
+    }
+
+    pub fn clear_binding() {
+        unsafe { glBindRenderbuffer(GL_RENDERBUFFER, 0) }
+    }
+
+    pub fn create_depth_stencil_storage(window_size: (u32, u32)) {
+        unsafe {
+            glRenderbufferStorage(
+                GL_RENDERBUFFER,
+                GL_DEPTH24_STENCIL8,
+                window_size.0 as i32,
+                window_size.1 as i32,
+            );
+        }
+    }
 }

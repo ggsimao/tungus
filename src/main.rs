@@ -16,13 +16,14 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use lighting::{DirectionalLight, PointLight, Spotlight};
+use lighting::{DirectionalLight, Lighting, PointLight, Spotlight};
 use meshes::{Draw, Mesh, Vertex};
 use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, Framebuffer, PolygonMode, VertexArray};
 use russimp::light::Light;
-use scene::SceneObject;
+use scene::{Scene, SceneObject};
+use screen::Screen;
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{ffi::c_void, path::Path};
 use textures::{Material, Texture, TextureType};
@@ -34,6 +35,7 @@ pub mod meshes;
 pub mod models;
 pub mod rendering;
 pub mod scene;
+pub mod screen;
 pub mod shaders;
 pub mod textures;
 
@@ -54,94 +56,6 @@ const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_wind
 
 const WINDOW_TITLE: &str = "Tungus";
 const WINDOW_SIZE: (u32, u32) = (600, 600);
-
-struct Lighting {
-    pub dir: DirectionalLight,
-    pub point: Vec<PointLight>,
-    pub spot: Spotlight,
-}
-
-struct Scene<'a> {
-    pub objects: &'a Vec<&'a SceneObject>,
-    pub object_shader: &'a ShaderProgram,
-    pub outline_shader: &'a ShaderProgram,
-    pub camera: &'a Camera,
-    pub lighting: &'a Lighting,
-}
-
-fn draw_scene(scene: &Scene) {
-    let objects = scene.objects;
-    let object_shader = scene.object_shader;
-    let outline_shader = scene.outline_shader;
-    let camera = scene.camera;
-    let lighting = scene.lighting;
-
-    let projection = &perspective(1.0, camera.get_fov(), 0.1, 100.0);
-    let reinitialize_object_shader = || {
-        object_shader.use_program();
-        object_shader.set_view(&camera);
-
-        object_shader.set_directional_light("dirLight", &lighting.dir);
-        object_shader.set_matrix_4fv("projectionMatrix", projection);
-        for (i, point) in lighting.point.iter().enumerate() {
-            object_shader.set_point_light(format!("pointLights[{}]", i).as_str(), &point);
-        }
-        object_shader.set_spotlight("spotlight", &lighting.spot);
-    };
-    let reinitialize_outline_shader = || {
-        outline_shader.use_program();
-        outline_shader.set_view(&camera);
-        outline_shader.set_matrix_4fv("projectionMatrix", projection);
-    };
-
-    let mut ordered_objects = objects.clone();
-
-    let distance_compare = |a: &&SceneObject, b: &&SceneObject| {
-        let distance_a = length(&(camera.get_pos() - a.get_pos()));
-        let distance_b = length(&(camera.get_pos() - b.get_pos()));
-        distance_b.partial_cmp(&distance_a).unwrap()
-    };
-
-    // Doesn't take into account different faces of the same object
-    ordered_objects.sort_by(distance_compare);
-
-    reinitialize_object_shader();
-    for object in ordered_objects {
-        object.draw(&object_shader);
-        if object.has_outline() {
-            reinitialize_outline_shader();
-            object.draw_outline(&outline_shader);
-            reinitialize_object_shader();
-        }
-    }
-}
-
-fn draw_on_framebuffer(
-    fb: &Framebuffer,
-    screen: &Mesh,
-    screen_shader: &ShaderProgram,
-    scene: &Scene,
-) {
-    // rendering::clear_color(0.2, 0.3, 0.3, 0.0);
-    fb.bind();
-    unsafe {
-        glClearColor(0.1, 0.1, 0.1, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
-    }
-    draw_scene(scene);
-
-    Framebuffer::clear_binding();
-    unsafe {
-        glClearColor(1.0, 1.0, 1.0, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glDisable(GL_DEPTH_TEST);
-    }
-
-    screen_shader.use_program();
-    screen_shader.set_texture("screenTexture", fb.get_texture());
-    screen.draw(&screen_shader);
-}
 
 fn main() {
     let sdl = SDL::init(InitFlags::Everything).expect("couldn't start SDL");
@@ -170,6 +84,9 @@ fn main() {
     let framebuffer = Framebuffer::new().unwrap();
     framebuffer.setup_with_renderbuffer(WINDOW_SIZE);
 
+    let mirrored_framebuffer = Framebuffer::new().unwrap();
+    mirrored_framebuffer.setup_with_renderbuffer(WINDOW_SIZE);
+
     unsafe {
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_STENCIL_TEST);
@@ -194,9 +111,11 @@ fn main() {
     // box_object.translate(&vec3(0.0, 0.0, -1.0));
     objects_list.push(&box_object);
 
-    let screen = Mesh::square(2.0);
+    let canvas = SceneObject::from(Mesh::square(2.0));
+    let mirror = SceneObject::from(Mesh::square(2.0));
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
+    let mut mirror_camera;
 
     let ambient = vec3(0.2, 0.2, 0.2);
     let diffuse = vec3(1.0, 1.0, 1.0);
@@ -252,6 +171,19 @@ fn main() {
         ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
     let shader_program_screen =
         ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap();
+
+    let screen = Screen::new(
+        canvas,
+        vec4(0.1, 0.1, 0.1, 1.0),
+        framebuffer,
+        &shader_program_screen,
+    );
+    let mirrored_screen = Screen::new(
+        mirror,
+        vec4(0.1, 0.1, 0.1, 1.0),
+        mirrored_framebuffer,
+        &shader_program_screen,
+    );
 
     rendering::polygon_mode(PolygonMode::Fill);
 
@@ -322,8 +254,19 @@ fn main() {
             camera: &main_camera,
             lighting: &lighting,
         };
+        mirror_camera = main_camera.invert();
+        let mirrored_scene = Scene {
+            objects: &objects_list,
+            object_shader: &shader_program_model,
+            outline_shader: &shader_program_outline,
+            camera: &mirror_camera,
+            lighting: &lighting,
+        };
 
-        draw_on_framebuffer(&framebuffer, &screen, &shader_program_screen, &scene);
+        mirrored_screen.draw_on_framebuffer(&mirrored_scene);
+        screen.draw_on_framebuffer(&scene);
+        mirrored_screen.draw_on_another(&screen, 0.3, vec2(0.5, 0.5));
+        screen.draw_on_screen();
 
         win.swap_window();
     }

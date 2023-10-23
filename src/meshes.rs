@@ -17,6 +17,13 @@ use crate::{
 
 pub trait Draw {
     fn draw(&self, shader: &ShaderProgram);
+    fn clone_box(&self) -> Box<dyn Draw>;
+}
+
+impl Clone for Box<dyn Draw> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -247,6 +254,9 @@ impl Draw for Mesh {
             );
         }
         VertexArray::clear_binding();
+    }
+    fn clone_box(&self) -> Box<dyn Draw> {
+        Box::new(self.clone())
     }
 }
 

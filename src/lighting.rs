@@ -75,3 +75,9 @@ impl Spotlight {
         }
     }
 }
+
+pub struct Lighting {
+    pub dir: DirectionalLight,
+    pub point: Vec<PointLight>,
+    pub spot: Spotlight,
+}

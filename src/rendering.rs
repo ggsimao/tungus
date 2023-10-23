@@ -12,9 +12,7 @@ use nalgebra_glm::*;
 use crate::meshes::Vertex;
 use crate::textures::{Texture, TextureType};
 
-pub fn clear_color(r: f32, g: f32, b: f32, a: f32) {
-    unsafe { glClearColor(r, g, b, a) }
-}
+// I really don't like the way this file is right now.
 
 pub struct VertexArray(pub u32);
 impl VertexArray {

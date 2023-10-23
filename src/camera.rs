@@ -4,6 +4,7 @@ use nalgebra_glm::*;
 
 const ANGLE_LOWER_BOUND: f32 = 0.001;
 
+#[derive(Clone)]
 pub struct Camera {
     pos: Vec3,
     direction: Vec3,
@@ -91,6 +92,18 @@ impl Camera {
     }
     pub fn rotate_roll(&mut self, rotation: f32) {
         self.rotate(vec3(0.0, 0.0, rotation));
+    }
+    pub fn get_pitch(&self) -> f32 {
+        self.pitch
+    }
+    pub fn get_yaw(&self) -> f32 {
+        self.yaw
+    }
+    pub fn invert(&self) -> Camera {
+        let mut inverted = self.clone();
+        inverted.rotate_pitch(inverted.get_pitch().to_degrees() * -2.0);
+        inverted.rotate_yaw(180.0);
+        inverted
     }
 
     pub fn change_fov(&mut self, offset: f32) {

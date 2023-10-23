@@ -1,3 +1,7 @@
+use std::cmp::Ordering;
+
+use crate::camera::Camera;
+use crate::lighting::Lighting;
 use crate::meshes::{Draw, Mesh};
 use crate::models::Model;
 use crate::shaders::ShaderProgram;
@@ -5,6 +9,7 @@ use gl33::gl_enumerations::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
 
+#[derive(Clone)]
 pub struct SceneObject {
     drawable: Box<dyn Draw>,
     position: Vec3,
@@ -81,5 +86,73 @@ impl Draw for SceneObject {
         shader.set_matrix_4fv("modelMatrix", &self.model);
         shader.set_matrix_3fv("normalMatrix", &self.normal);
         self.drawable.draw(shader);
+    }
+    fn clone_box(&self) -> Box<dyn Draw> {
+        Box::new(self.clone())
+    }
+}
+
+pub struct Scene<'a> {
+    pub objects: &'a Vec<&'a SceneObject>,
+    pub object_shader: &'a ShaderProgram,
+    pub outline_shader: &'a ShaderProgram,
+    pub camera: &'a Camera,
+    pub lighting: &'a Lighting,
+}
+
+impl<'a> Scene<'a> {
+    // It might seem strange for this not to be from the trait Draw, but
+    // this wouldn't work well with other things that accept Draw. Maybe choose a better name?
+    pub fn draw(&self) {
+        let mut ordered_objects = self.objects.clone();
+
+        // Doesn't take into account different faces of the same object
+        ordered_objects.sort_by(|a, b| self.distance_compare(a, b));
+
+        self.reinitialize_object_shader();
+        for object in ordered_objects {
+            object.draw(&self.object_shader);
+            if object.has_outline() {
+                self.reinitialize_outline_shader();
+                object.draw_outline(&self.outline_shader);
+                self.reinitialize_object_shader();
+            }
+        }
+    }
+
+    fn distance_compare(&self, a: &SceneObject, b: &SceneObject) -> Ordering {
+        let distance_a = length(&(self.camera.get_pos() - a.get_pos()));
+        let distance_b = length(&(self.camera.get_pos() - b.get_pos()));
+        distance_b.partial_cmp(&distance_a).unwrap()
+    }
+
+    fn reinitialize_object_shader(&self) {
+        self.object_shader.use_program();
+        self.object_shader.set_view(&self.camera);
+
+        // TODO: take this out of the method so it doesn't have to be called more than necessary
+        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
+
+        // TODO: change this for a more general set_lighting method
+        self.object_shader
+            .set_directional_light("dirLight", &self.lighting.dir);
+        self.object_shader
+            .set_matrix_4fv("projectionMatrix", projection);
+        for (i, point) in self.lighting.point.iter().enumerate() {
+            self.object_shader
+                .set_point_light(format!("pointLights[{}]", i).as_str(), &point);
+        }
+        self.object_shader
+            .set_spotlight("spotlight", &self.lighting.spot);
+    }
+
+    fn reinitialize_outline_shader(&self) {
+        // TODO: take this out of the method so it doesn't have to be called more than necessary
+        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
+
+        self.outline_shader.use_program();
+        self.outline_shader.set_view(&self.camera);
+        self.outline_shader
+            .set_matrix_4fv("projectionMatrix", projection);
     }
 }

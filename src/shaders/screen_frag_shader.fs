@@ -5,7 +5,7 @@ out vec4 fragColor;
 
 uniform sampler2D screenTexture;
 
-const float offset = 1.0 / 300.0;
+const float offset = 1.0 / 600.0;
 
 const float kernel[3][3] = float[][](
     float[](2,2,2),

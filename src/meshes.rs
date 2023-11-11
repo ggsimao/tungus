@@ -17,6 +17,13 @@ use crate::{
 
 pub trait Draw {
     fn draw(&self, shader: &ShaderProgram);
+    fn clone_box(&self) -> Box<dyn Draw>;
+}
+
+impl Clone for Box<dyn Draw> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -88,6 +95,10 @@ impl Mesh {
         mesh
     }
 
+    pub fn get_vao(&self) -> &VertexArray {
+        &self.vao
+    }
+
     fn setup_mesh(&self) {
         self.vao.bind();
 
@@ -151,6 +162,7 @@ impl Mesh {
             Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
         ];
+        // order should be counter-clockwise for each triangle
         let indices = vec![
             0, 2, 1, 1, 2, 3, 0, 1, 4, 4, 1, 5, 2, 0, 6, 6, 0, 4, 3, 7, 1, 1, 7, 5, 2, 6, 3, 3, 6,
             7, 7, 6, 5, 5, 6, 4,
@@ -178,6 +190,7 @@ impl Mesh {
         }
         for i in 0..8 {
             vertices[i].normal = normals[i] / 4.0;
+            vertices[i].tex_coords = vec2((i % 2) as f32, (i / 4) as f32);
         }
         let cube = Mesh {
             vertices,
@@ -231,9 +244,6 @@ impl Mesh {
 impl Draw for Mesh {
     fn draw(&self, shader: &ShaderProgram) {
         shader.set_material("material", &self.material);
-        unsafe {
-            glActiveTexture(GL_TEXTURE0);
-        }
         self.vao.bind();
         unsafe {
             glDrawElements(
@@ -244,6 +254,9 @@ impl Draw for Mesh {
             );
         }
         VertexArray::clear_binding();
+    }
+    fn clone_box(&self) -> Box<dyn Draw> {
+        Box::new(self.clone())
     }
 }
 

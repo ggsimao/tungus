@@ -16,6 +16,7 @@ use crate::{
     textures::{Material, Texture, TextureType},
 };
 
+#[derive(Clone)]
 pub struct Model {
     meshes: Vec<Mesh>,
     directory: String,
@@ -149,5 +150,8 @@ impl Draw for Model {
         for mesh in &self.meshes {
             mesh.draw(shader);
         }
+    }
+    fn clone_box(&self) -> Box<dyn Draw> {
+        Box::new(self.clone())
     }
 }

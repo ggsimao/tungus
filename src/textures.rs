@@ -12,6 +12,7 @@ use std::path::Path;
 pub enum TextureType {
     Diffuse,
     Specular,
+    Attachment,
 }
 
 #[derive(Clone, Debug)]
@@ -74,7 +75,7 @@ impl Texture {
         }
     }
 
-    pub fn clear_binding(&self) {
+    pub fn clear_binding() {
         unsafe {
             glBindTexture(GL_TEXTURE_2D, 0);
         }

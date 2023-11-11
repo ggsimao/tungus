@@ -12,7 +12,7 @@ use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
-use crate::textures::Material;
+use crate::textures::{Material, Texture};
 
 pub struct Shader(pub u32);
 
@@ -194,6 +194,13 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniformMatrix3fv(location, 1, 0, value.as_ptr()) }
     }
+    pub fn set_texture(&self, texture_name: &str, value: &Texture) {
+        unsafe {
+            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        }
+        value.bind();
+        self.set_1i(texture_name, 0 as i32);
+    }
     pub fn set_material(&self, material_name: &str, value: &Material) {
         let diffuse_vector = value.get_diffuse_maps();
         let specular_vector = value.get_specular_maps();
@@ -202,19 +209,19 @@ impl ShaderProgram {
             unsafe {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
-            tex_count += 1;
             diffuse.bind();
             let name = format!("{}.Diffuse[{}]", material_name, i);
             self.set_1i(&name, i as i32);
+            tex_count += 1;
         }
         for (i, specular) in specular_vector.iter().enumerate() {
             unsafe {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
-            tex_count += 1;
             specular.bind();
             let name = format!("{}.Specular[{}]", material_name, i);
             self.set_1i(&name, i as i32);
+            tex_count += 1;
         }
         self.set_1f(
             &format!("{}.shininess", material_name),
@@ -250,9 +257,9 @@ impl ShaderProgram {
         self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
         self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
         self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
-        self.set_3f(format!("{}.ambient", name).as_str(), &value.amb);
-        self.set_3f(format!("{}.diffuse", name).as_str(), &value.diff);
-        self.set_3f(format!("{}.specular", name).as_str(), &value.spec);
+        self.set_3f(format!("{}.ambient", name).as_str(), &value.get_amb());
+        self.set_3f(format!("{}.diffuse", name).as_str(), &value.get_diff());
+        self.set_3f(format!("{}.specular", name).as_str(), &value.get_spec());
         self.set_1f(format!("{}.phiCos", name).as_str(), value.phi.cos());
         self.set_1f(format!("{}.gammaCos", name).as_str(), value.gamma.cos());
     }

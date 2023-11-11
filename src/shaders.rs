@@ -257,9 +257,9 @@ impl ShaderProgram {
         self.set_1f(format!("{}.constant", name).as_str(), value.att.x);
         self.set_1f(format!("{}.linear", name).as_str(), value.att.y);
         self.set_1f(format!("{}.quadratic", name).as_str(), value.att.z);
-        self.set_3f(format!("{}.ambient", name).as_str(), &value.amb);
-        self.set_3f(format!("{}.diffuse", name).as_str(), &value.diff);
-        self.set_3f(format!("{}.specular", name).as_str(), &value.spec);
+        self.set_3f(format!("{}.ambient", name).as_str(), &value.get_amb());
+        self.set_3f(format!("{}.diffuse", name).as_str(), &value.get_diff());
+        self.set_3f(format!("{}.specular", name).as_str(), &value.get_spec());
         self.set_1f(format!("{}.phiCos", name).as_str(), value.phi.cos());
         self.set_1f(format!("{}.gammaCos", name).as_str(), value.gamma.cos());
     }

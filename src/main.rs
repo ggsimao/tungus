@@ -6,7 +6,9 @@
 
 // use assimp;
 use beryllium::*;
-use camera::Camera;
+use camera::{Camera, CameraController};
+use controls::{Controller, SignalHandler};
+use systems::{Program, ProgramController};
 use core::{
     convert::{TryFrom, TryInto},
     mem::{size_of, size_of_val},
@@ -16,7 +18,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use lighting::{DirectionalLight, Lighting, PointLight, Spotlight};
+use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
 use meshes::{Draw, Mesh, Vertex};
 use models::Model;
 use nalgebra_glm::*;
@@ -25,10 +27,11 @@ use russimp::light::Light;
 use scene::{Scene, SceneObject};
 use screen::Screen;
 use shaders::{Shader, ShaderProgram, ShaderType};
-use std::{ffi::c_void, path::Path};
+use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
 use textures::{Material, Texture, TextureType};
 
 pub mod camera;
+pub mod controls;
 pub mod helpers;
 pub mod lighting;
 pub mod meshes;
@@ -37,6 +40,7 @@ pub mod rendering;
 pub mod scene;
 pub mod screen;
 pub mod shaders;
+pub mod systems;
 pub mod textures;
 
 const REGULAR_VERT_SHADER: &str = "./src/shaders/regular_vert_shader.vs";
@@ -192,58 +196,33 @@ fn main() {
     let (mut walk_delta, mut ascend_delta, mut side_delta): (f32, f32, f32) = (0.0, 0.0, 0.0);
     let mut flashlight_on = false;
 
-    elapsed_time = 0;
+    let camera_controller = CameraController::new();
+    let flashlight_controller = FlashlightController::new();
+    let program_controller = ProgramController::new();
+    let mut signal_handler = SignalHandler::new(&sdl);
+    signal_handler.connect(camera_controller.clone());
+    signal_handler.connect(flashlight_controller.clone());
+    signal_handler.connect(program_controller.clone());
 
-    'main_loop: loop {
+    let mut program_loop = Program { loop_active: true };
+
+    elapsed_time = 0;
+    let mut cycle_time = 0.0;
+
+    'main_loop: while program_loop.loop_active {
         previous_time = elapsed_time;
         elapsed_time = sdl.get_ticks();
-        translate_speed = (elapsed_time - previous_time) as f32 * 0.002;
-        rotation_speed = (elapsed_time - previous_time) as f32 * 0.01;
-        zoom_speed = (elapsed_time - previous_time) as f32 * 0.1;
+        cycle_time = (elapsed_time - previous_time) as f32;
 
-        'event_polling: while let Some(event) = sdl.poll_events().and_then(Result::ok) {
-            match event {
-                Event::Quit(_) => break 'main_loop,
-                Event::Keyboard(key_event) => {
-                    let pressed_value = key_event.is_pressed as i32 as f32;
-                    match key_event.key.keycode {
-                        Keycode::ESCAPE => break 'main_loop,
-                        Keycode::A => side_delta = translate_speed * -pressed_value,
-                        Keycode::D => side_delta = translate_speed * pressed_value,
-                        Keycode::SPACE => ascend_delta = translate_speed * pressed_value,
-                        Keycode::LCTRL => ascend_delta = translate_speed * -pressed_value,
-                        Keycode::S => walk_delta = translate_speed * pressed_value,
-                        Keycode::W => walk_delta = translate_speed * -pressed_value,
-                        Keycode::F => {
-                            if pressed_value != 0.0 {
-                                flashlight_on = !flashlight_on
-                            }
-                        }
-                        _ => (),
-                    }
-                    break 'event_polling;
-                }
-                Event::MouseMotion(motion_event) => {
-                    main_camera.rotate(vec3(
-                        -motion_event.y_delta as f32 * rotation_speed,
-                        motion_event.x_delta as f32 * rotation_speed,
-                        0.0,
-                    ));
-                }
-                Event::MouseWheel(wheel_event) => {
-                    main_camera.change_fov(wheel_event.y_delta as f32 * zoom_speed);
-                }
-                _ => (),
-            }
-        }
-        main_camera.translate_longitudinal(side_delta);
-        main_camera.translate_forward(walk_delta);
-        main_camera.translate_vertical(ascend_delta);
-        lighting.spot.phi = phi * flashlight_on as i32 as f32;
-        lighting.spot.gamma = gamma * flashlight_on as i32 as f32;
+        camera_controller.update_control_parameters(&mut |controller: &mut CameraController| {
+            controller.set_speeds(cycle_time);
+        });
+        signal_handler.wait_event();
+        camera_controller.process_signals(&mut main_camera);
+        flashlight_controller.process_signals(&mut lighting.spot);
+        program_controller.process_signals(&mut program_loop);
         lighting.spot.pos = main_camera.get_pos();
         lighting.spot.dir = main_camera.get_dir();
-
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
         // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 

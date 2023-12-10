@@ -1,7 +1,12 @@
-use crate::meshes::{Draw, Mesh};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::controls::{Controller, SignalType, Slot};
+use crate::meshes::{BasicMesh, Draw};
 use crate::rendering::Framebuffer;
 use crate::scene::{Scene, SceneObject};
 use crate::shaders::ShaderProgram;
+use beryllium::Keycode;
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
@@ -13,6 +18,7 @@ pub struct Screen<'a> {
     clear_color: Vec4,
     fbo: Framebuffer,
     shader: &'a ShaderProgram,
+    filter: bool,
 }
 
 impl<'a> Screen<'a> {
@@ -27,6 +33,7 @@ impl<'a> Screen<'a> {
             clear_color,
             fbo,
             shader,
+            filter: false,
         }
     }
     pub fn clear_color(&self) {
@@ -74,7 +81,7 @@ impl<'a> Screen<'a> {
 
         self.shader.use_program();
         self.shader
-            .set_texture("screenTexture", self.fbo.get_texture());
+            .set_texture2D("screenTexture", self.fbo.get_texture());
         transformed_canvas.draw(&self.shader);
     }
 
@@ -89,7 +96,51 @@ impl<'a> Screen<'a> {
 
         self.shader.use_program();
         self.shader
-            .set_texture("screenTexture", self.fbo.get_texture());
+            .set_texture2D("screenTexture", self.fbo.get_texture());
+        self.shader.set_1b("applyFilter", self.filter);
         self.canvas.draw(&self.shader);
+    }
+}
+
+pub struct ScreenController {
+    pub signal_list: Vec<SignalType>,
+    filter: bool,
+}
+
+impl ScreenController {
+    pub fn new() -> Rc<RefCell<ScreenController>> {
+        Rc::new(RefCell::new(Self {
+            signal_list: vec![],
+            filter: false,
+        }))
+    }
+    pub fn on_key_pressed(&mut self, keycode: Keycode) {
+        match keycode {
+            Keycode::E => self.filter = !self.filter,
+            _ => (),
+        }
+    }
+}
+
+impl<'a> Slot<'a> for ScreenController {
+    fn on_signal(&mut self, signal: SignalType) {
+        self.signal_list.push(signal);
+    }
+}
+
+impl<'a> Controller<'a, Screen<'a>, ScreenController> for Rc<RefCell<ScreenController>> {
+    fn update_control_parameters(&self, update: &'a mut (dyn FnMut(&mut ScreenController))) {
+        update(&mut (**self).borrow_mut());
+    }
+    fn process_signals(&'a self, obj: &mut Screen) {
+        let mut self_obj = (**self).borrow_mut();
+        for signal in self_obj.signal_list.clone() {
+            match signal {
+                SignalType::KeyPressed(key) => self_obj.on_key_pressed(key),
+                _ => (),
+            }
+        }
+        obj.filter = self_obj.filter;
+        self_obj.signal_list.clear();
     }
 }

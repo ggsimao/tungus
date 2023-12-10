@@ -4,9 +4,7 @@ use beryllium::Keycode;
 use glfw::Key;
 use nalgebra_glm::*;
 
-use crate::controls::{
-    Controller, SignalHandler, SignalType, Slot,
-};
+use crate::controls::{Controller, SignalHandler, SignalType, Slot};
 
 const ANGLE_LOWER_BOUND: f32 = 0.001;
 

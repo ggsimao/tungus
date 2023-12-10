@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::camera::Camera;
 use crate::lighting::Lighting;
-use crate::meshes::{Draw, Mesh};
+use crate::meshes::{BasicMesh, Draw};
 use crate::models::Model;
 use crate::shaders::ShaderProgram;
 use gl33::gl_enumerations::*;
@@ -94,7 +94,9 @@ impl Draw for SceneObject {
 
 pub struct Scene<'a> {
     pub objects: &'a Vec<&'a SceneObject>,
+    pub skyboxes: &'a Vec<&'a SceneObject>,
     pub object_shader: &'a ShaderProgram,
+    pub skybox_shader: &'a ShaderProgram,
     pub outline_shader: &'a ShaderProgram,
     pub camera: &'a Camera,
     pub lighting: &'a Lighting,
@@ -104,6 +106,22 @@ impl<'a> Scene<'a> {
     // It might seem strange for this not to be from the trait Draw, but
     // this wouldn't work well with other things that accept Draw. Maybe choose a better name?
     pub fn draw(&self) {
+        unsafe {
+            glDisable(GL_CULL_FACE);
+            glDisable(GL_DEPTH_TEST);
+        }
+
+        self.reinitialize_skybox_shader();
+
+        for skybox in self.skyboxes {
+            skybox.draw(self.skybox_shader);
+        }
+
+        unsafe {
+            glEnable(GL_CULL_FACE);
+            glEnable(GL_DEPTH_TEST);
+        }
+
         let mut ordered_objects = self.objects.clone();
 
         // Doesn't take into account different faces of the same object
@@ -144,6 +162,17 @@ impl<'a> Scene<'a> {
         }
         self.object_shader
             .set_spotlight("spotlight", &self.lighting.spot);
+    }
+
+    fn reinitialize_skybox_shader(&self) {
+        self.skybox_shader.use_program();
+
+        let view = &mat3_to_mat4(&mat4_to_mat3(&self.camera.look_at()));
+        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
+
+        self.skybox_shader.set_matrix_4fv("viewMatrix", view);
+        self.skybox_shader
+            .set_matrix_4fv("projectionMatrix", projection);
     }
 
     fn reinitialize_outline_shader(&self) {

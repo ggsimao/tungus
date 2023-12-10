@@ -42,7 +42,10 @@ impl<'a> SignalHandler<'a> {
                         }
                     }
                     Event::MouseMotion(motion_event) => {
-                        self.emit(SignalType::MouseMoved(motion_event.y_delta, motion_event.x_delta));
+                        self.emit(SignalType::MouseMoved(
+                            motion_event.y_delta,
+                            motion_event.x_delta,
+                        ));
                     }
                     Event::MouseWheel(wheel_event) => {
                         self.emit(SignalType::MouseScrolled(wheel_event.y_delta));

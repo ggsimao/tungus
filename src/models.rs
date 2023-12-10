@@ -11,14 +11,14 @@ use std::{
 };
 
 use crate::{
-    meshes::{Draw, Mesh, Vertex},
+    meshes::{BasicMesh, Draw, Vertex},
     shaders::ShaderProgram,
-    textures::{Material, Texture, TextureType},
+    textures::{Material, Texture2D, TextureType},
 };
 
 #[derive(Clone)]
 pub struct Model {
-    meshes: Vec<Mesh>,
+    meshes: Vec<BasicMesh>,
     directory: String,
     loaded_textures: Vec<String>,
 }
@@ -61,7 +61,7 @@ impl Model {
             self.process_node(&node_child, scene);
         }
     }
-    fn process_mesh(&mut self, mesh: &mesh::Mesh, scene: &Scene) -> Mesh {
+    fn process_mesh(&mut self, mesh: &mesh::Mesh, scene: &Scene) -> BasicMesh {
         let mut vertices: Vec<Vertex> = vec![];
         let mut indices: Vec<u32> = vec![];
 
@@ -78,7 +78,7 @@ impl Model {
             }
             if loaded_tex_coords.len() > 0 {
                 let loaded_tex = loaded_tex_coords[i];
-                vertex.tex_coords = vec2(loaded_tex.x, loaded_tex.y);
+                vertex.tex_coords = vec3(loaded_tex.x, -loaded_tex.y, 0.0);
             }
             vertices.push(vertex);
         }
@@ -104,7 +104,7 @@ impl Model {
 
         let material = Material::new(diffuse_maps, specular_maps, shininess);
 
-        Mesh::new(vertices, indices, material)
+        BasicMesh::new(vertices, indices, material)
     }
     fn load_shininess(&self, mat: &material::Material) -> f32 {
         for property in &mat.properties {
@@ -121,7 +121,7 @@ impl Model {
         mat: &material::Material,
         ttype: material::TextureType,
         typename: TextureType,
-    ) -> Vec<Texture> {
+    ) -> Vec<Texture2D> {
         let mut textures = vec![];
         'properties_loop: for property in &mat.properties {
             if property.semantic == ttype && property.key == "$tex.file" {
@@ -134,7 +134,7 @@ impl Model {
                             continue 'properties_loop;
                         }
                     }
-                    let mut texture = Texture::new(typename);
+                    let mut texture = Texture2D::new(typename);
                     texture.load(dir_path.join(tex_path).as_path());
                     self.loaded_textures.push(string_path.clone());
                     textures.push(texture);

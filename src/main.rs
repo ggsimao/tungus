@@ -8,7 +8,6 @@
 use beryllium::*;
 use camera::{Camera, CameraController};
 use controls::{Controller, SignalHandler};
-use systems::{Program, ProgramController};
 use core::{
     convert::{TryFrom, TryInto},
     mem::{size_of, size_of_val},
@@ -19,16 +18,17 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
-use meshes::{Draw, Mesh, Vertex};
+use meshes::{BasicMesh, Draw, Skybox, Vertex};
 use models::Model;
 use nalgebra_glm::*;
 use rendering::{Buffer, BufferType, Framebuffer, PolygonMode, VertexArray};
 use russimp::light::Light;
 use scene::{Scene, SceneObject};
-use screen::Screen;
+use screen::{Screen, ScreenController};
 use shaders::{Shader, ShaderProgram, ShaderType};
 use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
-use textures::{Material, Texture, TextureType};
+use systems::{Program, ProgramController};
+use textures::{CubeMap, Material, Texture2D, TextureType};
 
 pub mod camera;
 pub mod controls;
@@ -43,12 +43,14 @@ pub mod shaders;
 pub mod systems;
 pub mod textures;
 
+// const SHADERS: &str = "./src/shaders/"
 const REGULAR_VERT_SHADER: &str = "./src/shaders/regular_vert_shader.vs";
 const FRAG_SHADER_OBJECT: &str = "./src/shaders/object_frag_shader.fs";
 const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
-
 const SCREEN_VERT_SHADER: &str = "./src/shaders/screen_vert_shader.vs";
 const SCREEN_FRAG_SHADER: &str = "./src/shaders/screen_frag_shader.fs";
+const SKYBOX_VERT_SHADER: &str = "./src/shaders/skybox_vert_shader.vs";
+const SKYBOX_FRAG_SHADER: &str = "./src/shaders/skybox_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
@@ -57,6 +59,17 @@ const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
 const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
 const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
+
+const ABSTRACT_CUBE: &str = "./src/resources/models/cube.obj";
+
+const SKYBOX_FACES: [&str; 6] = [
+    "./src/resources/textures/skybox/right.jpg",
+    "./src/resources/textures/skybox/left.jpg",
+    "./src/resources/textures/skybox/top.jpg",
+    "./src/resources/textures/skybox/bottom.jpg",
+    "./src/resources/textures/skybox/front.jpg",
+    "./src/resources/textures/skybox/back.jpg",
+];
 
 const WINDOW_TITLE: &str = "Tungus";
 const WINDOW_SIZE: (u32, u32) = (600, 600);
@@ -106,17 +119,30 @@ fn main() {
 
     // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
 
-    let mut box_mesh = Mesh::cube(1.0);
-    let mut window_tex = Texture::new(TextureType::Diffuse);
-    window_tex.load(Path::new(WINDOW_TEXTURE));
+    let mut cube_map = CubeMap::new(TextureType::Diffuse);
+    cube_map.load(SKYBOX_FACES);
+    cube_map.set_wrapping(GL_CLAMP_TO_EDGE);
+    cube_map.set_filters(GL_LINEAR, GL_LINEAR);
+    let mut skybox = Skybox::new(cube_map);
+    let mut sky_object = SceneObject::from(skybox);
+
+    let mut cube = Model::new(Path::new(ABSTRACT_CUBE));
+
+    let mut box_mesh = BasicMesh::cube(1.0);
+    let mut window_tex = Texture2D::new(TextureType::Diffuse);
+    window_tex.load(&Path::new(WINDOW_TEXTURE));
     window_tex.set_wrapping(GL_CLAMP_TO_EDGE);
     box_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
     let mut box_object = SceneObject::from(box_mesh);
-    // box_object.translate(&vec3(0.0, 0.0, -1.0));
     objects_list.push(&box_object);
 
-    let canvas = SceneObject::from(Mesh::square(2.0));
-    let mirror = SceneObject::from(Mesh::square(2.0));
+    let mut cube_object = SceneObject::from(cube);
+    cube_object.scale(0.3);
+    cube_object.translate(&vec3(0.0, 1.0, 0.0));
+    objects_list.push(&cube_object);
+
+    let canvas = SceneObject::from(BasicMesh::square(2.0));
+    let mirror = SceneObject::from(BasicMesh::square(2.0));
 
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
     let mut mirror_camera;
@@ -154,8 +180,8 @@ fn main() {
         spot: flashlight,
     };
 
-    let mut lamp_mesh = Mesh::cube(1.0);
-    let mut lamp_texture = Texture::new(TextureType::Diffuse);
+    let mut lamp_mesh = BasicMesh::cube(1.0);
+    let mut lamp_texture = Texture2D::new(TextureType::Diffuse);
     lamp_texture.load(Path::new(LAMP_TEXTURE));
     lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 1.0);
     let mut lamp_objects: Vec<SceneObject> = Vec::new();
@@ -175,8 +201,10 @@ fn main() {
         ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
     let shader_program_screen =
         ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap();
+    let shader_program_skybox =
+        ShaderProgram::from_vert_frag(SKYBOX_VERT_SHADER, SKYBOX_FRAG_SHADER).unwrap();
 
-    let screen = Screen::new(
+    let mut screen = Screen::new(
         canvas,
         vec4(0.1, 0.1, 0.1, 1.0),
         framebuffer,
@@ -189,7 +217,15 @@ fn main() {
         &shader_program_screen,
     );
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
     rendering::polygon_mode(PolygonMode::Fill);
+
+    let error;
+    unsafe {
+        error = glGetError();
+    }
+    println!("polygon_mode: {:?}", error);
+    ///////////////////////////////////////////////////////////////////////////////////////////////
 
     let (mut elapsed_time, mut previous_time): (u32, u32);
     let (mut translate_speed, mut rotation_speed, mut zoom_speed): (f32, f32, f32);
@@ -199,10 +235,12 @@ fn main() {
     let camera_controller = CameraController::new();
     let flashlight_controller = FlashlightController::new();
     let program_controller = ProgramController::new();
+    let screen_controller = ScreenController::new();
     let mut signal_handler = SignalHandler::new(&sdl);
     signal_handler.connect(camera_controller.clone());
     signal_handler.connect(flashlight_controller.clone());
     signal_handler.connect(program_controller.clone());
+    signal_handler.connect(screen_controller.clone());
 
     let mut program_loop = Program { loop_active: true };
 
@@ -221,6 +259,7 @@ fn main() {
         camera_controller.process_signals(&mut main_camera);
         flashlight_controller.process_signals(&mut lighting.spot);
         program_controller.process_signals(&mut program_loop);
+        screen_controller.process_signals(&mut screen);
         lighting.spot.pos = main_camera.get_pos();
         lighting.spot.dir = main_camera.get_dir();
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
@@ -228,7 +267,9 @@ fn main() {
 
         let scene = Scene {
             objects: &objects_list,
+            skyboxes: &vec![&sky_object],
             object_shader: &shader_program_model,
+            skybox_shader: &shader_program_skybox,
             outline_shader: &shader_program_outline,
             camera: &main_camera,
             lighting: &lighting,
@@ -236,7 +277,9 @@ fn main() {
         mirror_camera = main_camera.invert();
         let mirrored_scene = Scene {
             objects: &objects_list,
+            skyboxes: &vec![&sky_object],
             object_shader: &shader_program_model,
+            skybox_shader: &shader_program_skybox,
             outline_shader: &shader_program_outline,
             camera: &mirror_camera,
             lighting: &lighting,

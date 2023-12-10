@@ -10,7 +10,7 @@ use gl33::global_loader::*;
 use nalgebra_glm::*;
 
 use crate::meshes::Vertex;
-use crate::textures::{Texture, TextureType};
+use crate::textures::{Texture2D, TextureType};
 
 // I really don't like the way this file is right now.
 
@@ -89,14 +89,14 @@ pub fn polygon_mode(mode: PolygonMode) {
 #[derive(Debug)]
 pub struct Framebuffer {
     id: u32,
-    texture: Texture,
+    texture: Texture2D,
     rbo: Renderbuffer,
 }
 
 impl Framebuffer {
     pub fn new() -> Option<Self> {
         let mut fbo = 0;
-        let texture = Texture::new(TextureType::Attachment);
+        let texture = Texture2D::new(TextureType::Attachment);
         let rbo = Renderbuffer::new().unwrap();
         unsafe {
             glGenFramebuffers(1, &mut fbo);
@@ -146,7 +146,7 @@ impl Framebuffer {
             );
         }
         self.texture.set_filters(GL_LINEAR, GL_LINEAR);
-        Texture::clear_binding();
+        Texture2D::clear_binding();
 
         unsafe {
             glFramebufferTexture2D(
@@ -174,7 +174,7 @@ impl Framebuffer {
                 null(),
             );
         }
-        Texture::clear_binding();
+        Texture2D::clear_binding();
         unsafe {
             glFramebufferTexture2D(
                 GL_FRAMEBUFFER,
@@ -211,7 +211,7 @@ impl Framebuffer {
         unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) }
     }
 
-    pub fn get_texture(&self) -> &Texture {
+    pub fn get_texture(&self) -> &Texture2D {
         &self.texture
     }
 }

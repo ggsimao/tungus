@@ -12,7 +12,8 @@ use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
-use crate::textures::{Material, Texture};
+use crate::textures::CubeMap;
+use crate::textures::{Material, Texture2D};
 
 pub struct Shader(pub u32);
 
@@ -194,16 +195,31 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniformMatrix3fv(location, 1, 0, value.as_ptr()) }
     }
-    pub fn set_texture(&self, texture_name: &str, value: &Texture) {
+    pub fn set_texture2D(&self, texture_name: &str, value: &Texture2D) {
         unsafe {
             glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
         }
         value.bind();
         self.set_1i(texture_name, 0 as i32);
+        unsafe {
+            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        }
+    }
+    pub fn set_cubemap(&self, texture_name: &str, value: &CubeMap) {
+        unsafe {
+            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        }
+        value.bind();
+        self.set_1i(texture_name, 0 as i32);
+        unsafe {
+            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        }
     }
     pub fn set_material(&self, material_name: &str, value: &Material) {
         let diffuse_vector = value.get_diffuse_maps();
         let specular_vector = value.get_specular_maps();
+        let loaded_diffuse = diffuse_vector.len().max(1) as i32;
+        let loaded_specular = specular_vector.len().max(1) as i32;
         let mut tex_count = 0;
         for (i, diffuse) in diffuse_vector.iter().enumerate() {
             unsafe {
@@ -227,13 +243,10 @@ impl ShaderProgram {
             &format!("{}.shininess", material_name),
             value.get_shininess(),
         );
-        self.set_1i(
-            &format!("{}.loadedDiffuse", material_name),
-            diffuse_vector.len().max(1) as i32,
-        );
+        self.set_1i(&format!("{}.loadedDiffuse", material_name), loaded_diffuse);
         self.set_1i(
             &format!("{}.loadedSpecular", material_name),
-            specular_vector.len().max(1) as i32,
+            loaded_specular,
         );
     }
     pub fn set_directional_light(&self, name: &str, value: &DirectionalLight) {

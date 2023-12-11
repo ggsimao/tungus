@@ -104,9 +104,9 @@ pub struct FlashlightController {
 
 impl FlashlightController {
     pub fn new() -> Rc<RefCell<FlashlightController>> {
-        Rc::new(RefCell::new(Self { 
-            signal_list: vec![], 
-            on: false 
+        Rc::new(RefCell::new(Self {
+            signal_list: vec![],
+            on: false,
         }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {

@@ -16,13 +16,13 @@ pub enum TextureType {
 }
 
 #[derive(Clone, Debug)]
-pub struct Texture {
+pub struct Texture2D {
     id: u32,
     ttype: TextureType,
     path: String,
 }
 
-impl Texture {
+impl Texture2D {
     pub fn new(ttype: TextureType) -> Self {
         let mut texture: u32 = 0;
         unsafe {
@@ -109,15 +109,118 @@ impl Texture {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CubeMap {
+    id: u32,
+    ttype: TextureType,
+}
+
+impl CubeMap {
+    pub fn new(ttype: TextureType) -> Self {
+        let mut texture: u32 = 0;
+        unsafe {
+            glGenTextures(1, &mut texture);
+        }
+        Self { id: texture, ttype }
+    }
+    pub fn load(&mut self, paths: [&str; 6]) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, self.id);
+        }
+        let (mut width, mut height, mut nr_channels): (i32, i32, i32) = (0, 0, 0);
+        for i in 0..6 {
+            let path_string = CString::new(paths[i]).unwrap();
+            unsafe {
+                // stbi_set_flip_vertically_on_load(1);
+                let data = stbi_load(
+                    path_string.as_ptr(),
+                    &mut width,
+                    &mut height,
+                    &mut nr_channels,
+                    0,
+                );
+                let format = match nr_channels {
+                    4 => GL_RGBA,
+                    _ => GL_RGB,
+                };
+                glTexImage2D(
+                    GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X.0 + i as u32),
+                    0,
+                    GL_RGB.0 as i32,
+                    width,
+                    height,
+                    0,
+                    format,
+                    GL_UNSIGNED_BYTE,
+                    data as *const c_void,
+                );
+                glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+                stbi_image_free(data as *mut c_void);
+            }
+        }
+        unsafe {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        }
+    }
+
+    pub fn bind(&self) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, self.id);
+        }
+    }
+
+    pub fn clear_binding() {
+        unsafe {
+            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+        }
+    }
+
+    pub fn set_filters(&self, min_param: GLenum, mag_param: GLenum) {
+        unsafe {
+            glTexParameteri(
+                GL_TEXTURE_CUBE_MAP,
+                GL_TEXTURE_MIN_FILTER,
+                min_param.0 as i32,
+            );
+            glTexParameteri(
+                GL_TEXTURE_CUBE_MAP,
+                GL_TEXTURE_MAG_FILTER,
+                mag_param.0 as i32,
+            );
+        }
+    }
+
+    pub fn set_wrapping(&self, wrapping: GLenum) {
+        unsafe {
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, wrapping.0 as i32);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, wrapping.0 as i32);
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, wrapping.0 as i32);
+        }
+    }
+
+    pub fn set_wrapping_on_axis(&self, axis: GLenum, wrapping: GLenum) {
+        unsafe {
+            glTexParameteri(GL_TEXTURE_CUBE_MAP, axis, wrapping.0 as i32);
+        }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    pub fn get_type(&self) -> TextureType {
+        self.ttype
+    }
+}
+
 #[derive(Clone)]
 pub struct Material {
-    diffuse_maps: Vec<Texture>,
-    specular_maps: Vec<Texture>,
+    diffuse_maps: Vec<Texture2D>,
+    specular_maps: Vec<Texture2D>,
     shininess: f32,
 }
 
 impl Material {
-    pub fn new(diff: Vec<Texture>, spec: Vec<Texture>, shininess: f32) -> Self {
+    pub fn new(diff: Vec<Texture2D>, spec: Vec<Texture2D>, shininess: f32) -> Self {
         Material {
             diffuse_maps: diff,
             specular_maps: spec,
@@ -125,11 +228,11 @@ impl Material {
         }
     }
 
-    pub fn get_diffuse_maps(&self) -> &Vec<Texture> {
+    pub fn get_diffuse_maps(&self) -> &Vec<Texture2D> {
         &self.diffuse_maps
     }
 
-    pub fn get_specular_maps(&self) -> &Vec<Texture> {
+    pub fn get_specular_maps(&self) -> &Vec<Texture2D> {
         &self.specular_maps
     }
 

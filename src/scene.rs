@@ -106,9 +106,24 @@ impl<'a> Scene<'a> {
     // It might seem strange for this not to be from the trait Draw, but
     // this wouldn't work well with other things that accept Draw. Maybe choose a better name?
     pub fn draw(&self) {
+        let mut ordered_objects = self.objects.clone();
+        
+        // Doesn't take into account different faces of the same object
+        ordered_objects.sort_by(|a, b| self.distance_compare(a, b));
+        
+        self.reinitialize_object_shader();
+        for object in ordered_objects {
+            object.draw(&self.object_shader);
+            if object.has_outline() {
+                self.reinitialize_outline_shader();
+                object.draw_outline(&self.outline_shader);
+                self.reinitialize_object_shader();
+            }
+        }
+
         unsafe {
             glDisable(GL_CULL_FACE);
-            glDisable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
         }
 
         self.reinitialize_skybox_shader();
@@ -119,22 +134,7 @@ impl<'a> Scene<'a> {
 
         unsafe {
             glEnable(GL_CULL_FACE);
-            glEnable(GL_DEPTH_TEST);
-        }
-
-        let mut ordered_objects = self.objects.clone();
-
-        // Doesn't take into account different faces of the same object
-        ordered_objects.sort_by(|a, b| self.distance_compare(a, b));
-
-        self.reinitialize_object_shader();
-        for object in ordered_objects {
-            object.draw(&self.object_shader);
-            if object.has_outline() {
-                self.reinitialize_outline_shader();
-                object.draw_outline(&self.outline_shader);
-                self.reinitialize_object_shader();
-            }
+            glDepthFunc(GL_LESS);
         }
     }
 

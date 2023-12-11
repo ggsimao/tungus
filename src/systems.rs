@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use beryllium::Keycode;
 
-use crate::controls::{Controller, Slot, SignalHandler, SignalType};
+use crate::controls::{Controller, SignalHandler, SignalType, Slot};
 
 pub struct Program {
     pub loop_active: bool,
@@ -17,7 +17,7 @@ impl<'a> ProgramController {
     pub fn new() -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
             signal_list: vec![],
-            quit: false
+            quit: false,
         }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {

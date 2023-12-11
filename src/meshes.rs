@@ -12,7 +12,7 @@ use crate::textures::Material;
 use crate::textures::TextureType;
 use crate::{
     rendering::{Buffer, BufferType, VertexArray},
-    textures::{Texture2D, CubeMap},
+    textures::{CubeMap, Texture2D},
 };
 
 pub trait Draw {

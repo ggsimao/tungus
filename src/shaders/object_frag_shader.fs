@@ -1,7 +1,9 @@
 #version 430 core
-in vec3 fragPos;
-in vec3 normal;
-in vec2 texCoords;
+in VERTEX {
+    vec3 pos;
+    vec3 normal;
+    vec2 texCoords;
+} fs_in;
 
 #define NR_DIFFUSE_TEXTURES 3
 #define NR_SPECULAR_TEXTURES 3
@@ -46,15 +48,19 @@ struct Spotlight {
     float gammaCos;
 };
 
-uniform DirLight dirLight;
+layout (std140, binding = 0) uniform Matrices {
+    mat4 modelMat;
+    mat4 viewMat;
+    mat4 projMat;
+    mat3 normalMat;
+};
 
 #define NR_POINT_LIGHTS 4
+uniform DirLight dirLight;
 uniform PointLight pointLights[NR_POINT_LIGHTS];
-
 uniform Spotlight spotlight;
 
 uniform Material material;
-uniform vec3 viewPos;
 
 out vec4 fragColor;
 
@@ -145,19 +151,20 @@ vec4 calculateSpotlight(Spotlight light, vec3 normal, vec3 fragPos, vec3 viewDir
 
 void main() {
     for (int i = 0; i < material.loadedDiffuse; i++)
-        diff_tex_values[i] = texture(material . Diffuse[i], texCoords);
+        diff_tex_values[i] = texture(material . Diffuse[i], fs_in.texCoords);
     for (int i = 0; i < material.loadedSpecular; i++)
-        spec_tex_values[i] = texture(material . Specular[i], texCoords);
+        spec_tex_values[i] = texture(material . Specular[i], fs_in.texCoords);
 
-    vec3 norm = normalize(normal);
-    vec3 viewDir = normalize(viewPos - fragPos);
+    vec3 norm = normalize(fs_in.normal);
+    vec3 viewPos = vec3(viewMat[3][0], viewMat[3][1], viewMat[3][2]);
+    vec3 viewDir = normalize(viewPos - fs_in.pos);
 
     vec4 result = calculateDirectionalLight(dirLight, norm, viewDir);
 
     for (int i = 0; i < NR_POINT_LIGHTS; i++)
-        result += calculatePointLight(pointLights[i], norm, fragPos, viewDir);
+        result += calculatePointLight(pointLights[i], norm, fs_in.pos, viewDir);
 
-    result += calculateSpotlight(spotlight, norm, fragPos, viewDir);
+    result += calculateSpotlight(spotlight, norm, fs_in.pos, viewDir);
 
     if (result . a < 0.1) {
         discard;

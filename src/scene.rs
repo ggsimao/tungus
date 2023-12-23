@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::camera::Camera;
+use crate::data::UniformBuffer;
 use crate::lighting::Lighting;
 use crate::meshes::{BasicMesh, Draw};
 use crate::models::Model;
@@ -37,6 +38,14 @@ impl SceneObject {
         self.position
     }
 
+    pub fn get_model(&self) -> Mat4 {
+        self.model
+    }
+
+    pub fn get_normal(&self) -> Mat3 {
+        self.normal
+    }
+
     pub fn set_outline(&mut self, color: Vec3) {
         self.outline.x = color.x;
         self.outline.y = color.y;
@@ -66,7 +75,6 @@ impl SceneObject {
             glDisable(GL_DEPTH_TEST);
         }
 
-        shader.set_matrix_4fv("modelMatrix", &scale(&self.model, &vec3(1.1, 1.1, 1.1)));
         shader.set_3f("outlineColor", &self.outline.xyz());
         self.drawable.draw(shader);
 
@@ -83,8 +91,6 @@ impl SceneObject {
 
 impl Draw for SceneObject {
     fn draw(&self, shader: &ShaderProgram) {
-        shader.set_matrix_4fv("modelMatrix", &self.model);
-        shader.set_matrix_3fv("normalMatrix", &self.normal);
         self.drawable.draw(shader);
     }
     fn clone_box(&self) -> Box<dyn Draw> {
@@ -103,21 +109,28 @@ pub struct Scene<'a> {
 }
 
 impl<'a> Scene<'a> {
-    // It might seem strange for this not to be from the trait Draw, but
-    // this wouldn't work well with other things that accept Draw. Maybe choose a better name?
-    pub fn draw(&self) {
+    pub fn compose(&self, ubo: &UniformBuffer) {
         let mut ordered_objects = self.objects.clone();
-        
+
         // Doesn't take into account different faces of the same object
         ordered_objects.sort_by(|a, b| self.distance_compare(a, b));
-        
-        self.reinitialize_object_shader();
+
+        let projection = perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
+
+        ubo.set_view_mat(&self.camera.look_at());
+        ubo.set_projection_mat(&projection);
+
+        self.object_shader.use_program();
+        self.set_lighting_uniforms();
         for object in ordered_objects {
+            ubo.set_model_mat(&object.get_model());
+            ubo.set_normal_mat(&object.get_normal());
             object.draw(&self.object_shader);
             if object.has_outline() {
-                self.reinitialize_outline_shader();
+                self.outline_shader.use_program();
+                let outline_scale = scale(&object.get_model(), &vec3(1.1, 1.1, 1.1));
+                ubo.set_model_mat(&outline_scale);
                 object.draw_outline(&self.outline_shader);
-                self.reinitialize_object_shader();
             }
         }
 
@@ -126,7 +139,10 @@ impl<'a> Scene<'a> {
             glDepthFunc(GL_LEQUAL);
         }
 
-        self.reinitialize_skybox_shader();
+        let view = mat3_to_mat4(&mat4_to_mat3(&self.camera.look_at()));
+        ubo.set_view_mat(&view);
+
+        self.skybox_shader.use_program();
 
         for skybox in self.skyboxes {
             skybox.draw(self.skybox_shader);
@@ -144,44 +160,14 @@ impl<'a> Scene<'a> {
         distance_b.partial_cmp(&distance_a).unwrap()
     }
 
-    fn reinitialize_object_shader(&self) {
-        self.object_shader.use_program();
-        self.object_shader.set_view(&self.camera);
-
-        // TODO: take this out of the method so it doesn't have to be called more than necessary
-        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
-
-        // TODO: change this for a more general set_lighting method
+    fn set_lighting_uniforms(&self) {
         self.object_shader
             .set_directional_light("dirLight", &self.lighting.dir);
-        self.object_shader
-            .set_matrix_4fv("projectionMatrix", projection);
         for (i, point) in self.lighting.point.iter().enumerate() {
             self.object_shader
                 .set_point_light(format!("pointLights[{}]", i).as_str(), &point);
         }
         self.object_shader
             .set_spotlight("spotlight", &self.lighting.spot);
-    }
-
-    fn reinitialize_skybox_shader(&self) {
-        self.skybox_shader.use_program();
-
-        let view = &mat3_to_mat4(&mat4_to_mat3(&self.camera.look_at()));
-        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
-
-        self.skybox_shader.set_matrix_4fv("viewMatrix", view);
-        self.skybox_shader
-            .set_matrix_4fv("projectionMatrix", projection);
-    }
-
-    fn reinitialize_outline_shader(&self) {
-        // TODO: take this out of the method so it doesn't have to be called more than necessary
-        let projection = &perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
-
-        self.outline_shader.use_program();
-        self.outline_shader.set_view(&self.camera);
-        self.outline_shader
-            .set_matrix_4fv("projectionMatrix", projection);
     }
 }

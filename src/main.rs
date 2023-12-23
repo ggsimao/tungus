@@ -13,6 +13,7 @@ use core::{
     mem::{size_of, size_of_val},
     ptr::null,
 };
+use data::{Buffer, BufferType, Framebuffer, PolygonMode, UniformBuffer, VertexArray};
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
@@ -21,7 +22,6 @@ use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spo
 use meshes::{BasicMesh, Draw, Skybox, Vertex};
 use models::Model;
 use nalgebra_glm::*;
-use rendering::{Buffer, BufferType, Framebuffer, PolygonMode, VertexArray};
 use russimp::light::Light;
 use scene::{Scene, SceneObject};
 use screen::{Screen, ScreenController};
@@ -32,11 +32,11 @@ use textures::{CubeMap, Material, Texture2D, TextureType};
 
 pub mod camera;
 pub mod controls;
+pub mod data;
 pub mod helpers;
 pub mod lighting;
 pub mod meshes;
 pub mod models;
-pub mod rendering;
 pub mod scene;
 pub mod screen;
 pub mod shaders;
@@ -75,6 +75,8 @@ const WINDOW_TITLE: &str = "Tungus";
 const WINDOW_SIZE: (u32, u32) = (600, 600);
 
 fn main() {
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // System initialization
     let sdl = SDL::init(InitFlags::Everything).expect("couldn't start SDL");
     sdl.gl_set_attribute(SdlGlAttr::MajorVersion, 3).unwrap();
     sdl.gl_set_attribute(SdlGlAttr::MinorVersion, 3).unwrap();
@@ -115,38 +117,13 @@ fn main() {
 
     let _ = sdl.set_relative_mouse_mode(true);
 
-    let mut objects_list: Vec<&SceneObject> = vec![];
-
-    // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
-
-    let mut cube_map = CubeMap::new(TextureType::Diffuse);
-    cube_map.load(SKYBOX_FACES);
-    cube_map.set_wrapping(GL_CLAMP_TO_EDGE);
-    cube_map.set_filters(GL_LINEAR, GL_LINEAR);
-    let mut skybox = Skybox::new(cube_map);
-    let mut sky_object = SceneObject::from(skybox);
-
-    let mut cube = Model::new(Path::new(ABSTRACT_CUBE));
-
-    let mut box_mesh = BasicMesh::cube(1.0);
-    let mut window_tex = Texture2D::new(TextureType::Diffuse);
-    window_tex.load(&Path::new(WINDOW_TEXTURE));
-    window_tex.set_wrapping(GL_CLAMP_TO_EDGE);
-    box_mesh.material = Material::new(vec![window_tex], vec![], 1.0);
-    let mut box_object = SceneObject::from(box_mesh);
-    objects_list.push(&box_object);
-
-    let mut cube_object = SceneObject::from(cube);
-    cube_object.scale(0.3);
-    cube_object.translate(&vec3(0.0, 1.0, 0.0));
-    objects_list.push(&cube_object);
-
-    let canvas = SceneObject::from(BasicMesh::square(2.0));
-    let mirror = SceneObject::from(BasicMesh::square(2.0));
-
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Camera initialization
     let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
     let mut mirror_camera;
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Lighting initialization
     let ambient = vec3(0.2, 0.2, 0.2);
     let diffuse = vec3(1.0, 1.0, 1.0);
     let specular = vec3(1.0, 1.0, 1.0);
@@ -160,8 +137,6 @@ fn main() {
     lamps[1].pos = vec3(-1.0, -2.0, -1.0);
     lamps[2].pos = vec3(1.0, 0.0, 1.0);
     lamps[3].pos = vec3(0.0, -10.0, 0.0);
-
-    let (phi, gamma) = (15.0_f32.to_radians(), 20.0_f32.to_radians());
 
     let flashlight = Spotlight::new(
         main_camera.get_pos(),
@@ -180,6 +155,43 @@ fn main() {
         spot: flashlight,
     };
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // UBO initialization
+
+    let matrices_ubo = UniformBuffer::new(0).unwrap();
+    matrices_ubo.allocate(240);
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Scene objects initialization
+    let mut objects_list: Vec<&SceneObject> = vec![];
+
+    // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
+
+    let mut cube_map = CubeMap::new(TextureType::Diffuse);
+    cube_map.load(SKYBOX_FACES);
+    cube_map.set_wrapping(GL_CLAMP_TO_EDGE);
+    cube_map.set_filters(GL_LINEAR, GL_LINEAR);
+    let skybox = Skybox::new(cube_map);
+    let sky_object = SceneObject::from(skybox);
+
+    let cube = Model::new(Path::new(ABSTRACT_CUBE));
+
+    let mut box_mesh = BasicMesh::cube(1.0);
+    let mut cont_tex = Texture2D::new(TextureType::Diffuse);
+    cont_tex.load(&Path::new(CONTAINER_TEXTURE));
+    cont_tex.set_wrapping(GL_CLAMP_TO_EDGE);
+    let mut cont_spec = Texture2D::new(TextureType::Specular);
+    cont_spec.load(&Path::new(CONTAINER_SPECULAR));
+    cont_spec.set_wrapping(GL_CLAMP_TO_EDGE);
+    box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 1.0);
+    let box_object = SceneObject::from(box_mesh);
+    objects_list.push(&box_object);
+
+    let mut cube_object = SceneObject::from(cube);
+    cube_object.scale(0.3);
+    cube_object.translate(&vec3(0.0, 1.0, 0.0));
+    objects_list.push(&cube_object);
+
     let mut lamp_mesh = BasicMesh::cube(1.0);
     let mut lamp_texture = Texture2D::new(TextureType::Diffuse);
     lamp_texture.load(Path::new(LAMP_TEXTURE));
@@ -195,6 +207,11 @@ fn main() {
         objects_list.push(&lamp_objects[i]);
     }
 
+    let canvas = SceneObject::from(BasicMesh::square(2.0));
+    let mirror = SceneObject::from(BasicMesh::square(2.0));
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Shader initialization
     let shader_program_model =
         ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
     let shader_program_outline =
@@ -204,34 +221,35 @@ fn main() {
     let shader_program_skybox =
         ShaderProgram::from_vert_frag(SKYBOX_VERT_SHADER, SKYBOX_FRAG_SHADER).unwrap();
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Screen initialization
     let mut screen = Screen::new(
         canvas,
         vec4(0.1, 0.1, 0.1, 1.0),
         framebuffer,
         &shader_program_screen,
+        &matrices_ubo,
     );
     let mirrored_screen = Screen::new(
         mirror,
         vec4(0.1, 0.1, 0.1, 1.0),
         mirrored_framebuffer,
         &shader_program_screen,
+        &matrices_ubo,
     );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    rendering::polygon_mode(PolygonMode::Fill);
+    // This has an error for some reason
+    data::polygon_mode(PolygonMode::Fill);
 
     let error;
     unsafe {
         error = glGetError();
     }
     println!("polygon_mode: {:?}", error);
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
-
-    let (mut elapsed_time, mut previous_time): (u32, u32);
-    let (mut translate_speed, mut rotation_speed, mut zoom_speed): (f32, f32, f32);
-    let (mut walk_delta, mut ascend_delta, mut side_delta): (f32, f32, f32) = (0.0, 0.0, 0.0);
-    let mut flashlight_on = false;
-
+    // Control initialization
     let camera_controller = CameraController::new();
     let flashlight_controller = FlashlightController::new();
     let program_controller = ProgramController::new();
@@ -242,12 +260,15 @@ fn main() {
     signal_handler.connect(program_controller.clone());
     signal_handler.connect(screen_controller.clone());
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////
+    // Program loop
     let mut program_loop = Program { loop_active: true };
+    let (mut elapsed_time, mut previous_time): (u32, u32);
 
     elapsed_time = 0;
-    let mut cycle_time = 0.0;
+    let mut cycle_time;
 
-    'main_loop: while program_loop.loop_active {
+    while program_loop.loop_active {
         previous_time = elapsed_time;
         elapsed_time = sdl.get_ticks();
         cycle_time = (elapsed_time - previous_time) as f32;
@@ -285,8 +306,8 @@ fn main() {
             lighting: &lighting,
         };
 
-        mirrored_screen.draw_on_framebuffer(&mirrored_scene);
         screen.draw_on_framebuffer(&scene);
+        mirrored_screen.draw_on_framebuffer(&mirrored_scene);
         mirrored_screen.draw_on_another(&screen, 0.3, vec2(0.5, 0.5));
         screen.draw_on_screen();
 

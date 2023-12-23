@@ -8,6 +8,7 @@ use std::ffi::CString;
 use std::path::Path;
 
 use crate::camera::Camera;
+use crate::data::UniformBuffer;
 use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
@@ -160,11 +161,12 @@ impl ShaderProgram {
     }
 
     fn get_uniform_location(&self, name: &str) -> i32 {
+        let uniform_name = CString::new(name.as_bytes()).unwrap().into_raw() as *const u8;
+        let location: i32;
         unsafe {
-            let uniform_name = CString::new(name.as_bytes()).unwrap().into_raw() as *const u8;
-            let location: i32 = glGetUniformLocation(self.0, uniform_name);
-            location
+            location = glGetUniformLocation(self.0, uniform_name);
         }
+        location
     }
 
     pub fn set_1b(&self, name: &str, value: bool) {
@@ -275,9 +277,5 @@ impl ShaderProgram {
         self.set_3f(format!("{}.specular", name).as_str(), &value.get_spec());
         self.set_1f(format!("{}.phiCos", name).as_str(), value.phi.cos());
         self.set_1f(format!("{}.gammaCos", name).as_str(), value.gamma.cos());
-    }
-    pub fn set_view(&self, camera: &Camera) {
-        self.set_matrix_4fv("viewMatrix", &camera.look_at());
-        self.set_3f("viewPos", &camera.get_pos());
     }
 }

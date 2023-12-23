@@ -5,13 +5,13 @@ use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
 
-use crate::rendering::buffer_data;
+use crate::data::buffer_data;
 use crate::shaders::Shader;
 use crate::shaders::ShaderProgram;
 use crate::textures::Material;
 use crate::textures::TextureType;
 use crate::{
-    rendering::{Buffer, BufferType, VertexArray},
+    data::{Buffer, BufferType, VertexArray},
     textures::{CubeMap, Texture2D},
 };
 
@@ -93,58 +93,6 @@ impl BasicMesh {
         };
         mesh.setup_mesh();
         mesh
-    }
-
-    pub fn get_vao(&self) -> &VertexArray {
-        &self.vao
-    }
-
-    fn setup_mesh(&self) {
-        self.vao.bind();
-
-        self.vbo.bind(BufferType::Array);
-        buffer_data(
-            BufferType::Array,
-            bytemuck::cast_slice(&self.vertices),
-            GL_STATIC_DRAW,
-        );
-
-        self.ebo.bind(BufferType::ElementArray);
-        buffer_data(
-            BufferType::ElementArray,
-            bytemuck::cast_slice(&self.indices),
-            GL_STATIC_DRAW,
-        );
-
-        unsafe {
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(
-                0,
-                3,
-                GL_FLOAT,
-                GL_FALSE.0 as u8,
-                core::mem::size_of::<Vertex>().try_into().unwrap(),
-                core::mem::offset_of!(Vertex, pos) as *const _, // might seem redundant, but it's just in case the order changes
-            );
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(
-                1,
-                3,
-                GL_FLOAT,
-                GL_FALSE.0 as u8,
-                core::mem::size_of::<Vertex>().try_into().unwrap(),
-                core::mem::offset_of!(Vertex, normal) as *const _,
-            );
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(
-                2,
-                3,
-                GL_FLOAT,
-                GL_FALSE.0 as u8,
-                core::mem::size_of::<Vertex>().try_into().unwrap(),
-                core::mem::offset_of!(Vertex, tex_coords) as *const _,
-            );
-        }
     }
 
     pub fn cube(side: f32) -> Self {
@@ -254,6 +202,58 @@ impl BasicMesh {
         };
         square.setup_mesh();
         square
+    }
+
+    fn setup_mesh(&self) {
+        self.vao.bind();
+
+        self.vbo.bind(BufferType::Array);
+        buffer_data(
+            BufferType::Array,
+            bytemuck::cast_slice(&self.vertices),
+            GL_STATIC_DRAW,
+        );
+
+        self.ebo.bind(BufferType::ElementArray);
+        buffer_data(
+            BufferType::ElementArray,
+            bytemuck::cast_slice(&self.indices),
+            GL_STATIC_DRAW,
+        );
+
+        unsafe {
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(
+                0,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, pos) as *const _, // might seem redundant, but it's just in case the order changes
+            );
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, normal) as *const _,
+            );
+            glEnableVertexAttribArray(2);
+            glVertexAttribPointer(
+                2,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, tex_coords) as *const _,
+            );
+        }
+    }
+
+    pub fn get_vao(&self) -> &VertexArray {
+        &self.vao
     }
 }
 

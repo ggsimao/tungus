@@ -265,3 +265,82 @@ impl Renderbuffer {
         }
     }
 }
+
+pub struct UniformBuffer {
+    id: u32,
+    binding: u32,
+}
+
+impl UniformBuffer {
+    pub fn new(binding: u32) -> Option<Self> {
+        let mut ubo = 0;
+        unsafe {
+            glGenBuffers(1, &mut ubo);
+        }
+        if ubo != 0 {
+            Some(Self { id: ubo, binding })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn bind(&self) {
+        unsafe { glBindBuffer(GL_UNIFORM_BUFFER, self.id) }
+    }
+
+    pub fn clear_binding() {
+        unsafe { glBindBuffer(GL_UNIFORM_BUFFER, 0) }
+    }
+
+    pub fn allocate(&self, size: isize) {
+        self.bind();
+        unsafe {
+            glBufferData(GL_UNIFORM_BUFFER, size, null(), GL_STATIC_DRAW);
+        }
+        Self::clear_binding();
+    }
+
+    pub fn bind_base(&self) {
+        unsafe {
+            glBindBufferBase(GL_UNIFORM_BUFFER, self.binding, self.id);
+        }
+    }
+
+    pub fn set_model_mat(&self, model: &Mat4) {
+        // self.set_matrix_4fv("modelMat", model);
+        self.bind();
+        unsafe {
+            glBufferSubData(GL_UNIFORM_BUFFER, 0, 64, model.as_ptr().cast());
+        }
+        Self::clear_binding();
+    }
+    pub fn set_view_mat(&self, view: &Mat4) {
+        // self.set_matrix_4fv("viewMat", view);
+        // self.set_3f("viewPos", &camera.get_pos());
+        self.bind();
+        unsafe {
+            glBufferSubData(GL_UNIFORM_BUFFER, 64, 64, view.as_ptr().cast());
+        }
+        Self::clear_binding();
+    }
+    pub fn set_projection_mat(&self, proj: &Mat4) {
+        // self.set_matrix_4fv("projMat", proj);
+        self.bind();
+        unsafe {
+            glBufferSubData(GL_UNIFORM_BUFFER, 128, 64, proj.as_ptr().cast());
+        }
+        Self::clear_binding();
+    }
+    pub fn set_normal_mat(&self, normal: &Mat3) {
+        // self.set_matrix_3fv("normalMat", normal);
+        self.bind();
+        unsafe {
+            glBufferSubData(GL_UNIFORM_BUFFER, 192, 48, normal.as_ptr().cast());
+        }
+        Self::clear_binding();
+    }
+}

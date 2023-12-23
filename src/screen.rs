@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::controls::{Controller, SignalType, Slot};
+use crate::data::{Framebuffer, UniformBuffer};
 use crate::meshes::{BasicMesh, Draw};
-use crate::rendering::Framebuffer;
 use crate::scene::{Scene, SceneObject};
 use crate::shaders::ShaderProgram;
 use beryllium::Keycode;
@@ -19,6 +19,7 @@ pub struct Screen<'a> {
     fbo: Framebuffer,
     shader: &'a ShaderProgram,
     filter: bool,
+    ubo: &'a UniformBuffer,
 }
 
 impl<'a> Screen<'a> {
@@ -27,6 +28,7 @@ impl<'a> Screen<'a> {
         clear_color: Vec4,
         fbo: Framebuffer,
         shader: &'a ShaderProgram,
+        ubo: &'a UniformBuffer,
     ) -> Self {
         Self {
             canvas,
@@ -34,6 +36,7 @@ impl<'a> Screen<'a> {
             fbo,
             shader,
             filter: false,
+            ubo,
         }
     }
     pub fn clear_color(&self) {
@@ -61,7 +64,7 @@ impl<'a> Screen<'a> {
         unsafe {
             glEnable(GL_DEPTH_TEST);
         }
-        scene.draw();
+        scene.compose(&self.ubo);
     }
 
     pub fn bind(&self) {
@@ -70,6 +73,7 @@ impl<'a> Screen<'a> {
 
     pub fn draw_on_another(&self, other: &Screen, scaling: f32, offset: Vec2) {
         other.fbo.bind();
+        self.ubo.bind_base();
 
         let mut transformed_canvas = self.canvas.clone();
         transformed_canvas.scale(scaling);
@@ -82,11 +86,14 @@ impl<'a> Screen<'a> {
         self.shader.use_program();
         self.shader
             .set_texture2D("screenTexture", self.fbo.get_texture());
+        self.ubo.set_model_mat(&transformed_canvas.get_model());
+        self.ubo.set_normal_mat(&transformed_canvas.get_normal());
         transformed_canvas.draw(&self.shader);
     }
 
     pub fn draw_on_screen(&self) {
         Framebuffer::clear_binding();
+        self.ubo.bind_base();
 
         unsafe {
             glClearColor(1.0, 1.0, 1.0, 1.0);
@@ -98,6 +105,8 @@ impl<'a> Screen<'a> {
         self.shader
             .set_texture2D("screenTexture", self.fbo.get_texture());
         self.shader.set_1b("applyFilter", self.filter);
+        self.ubo.set_model_mat(&identity());
+        self.ubo.set_normal_mat(&identity());
         self.canvas.draw(&self.shader);
     }
 }

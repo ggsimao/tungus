@@ -404,3 +404,95 @@ impl Clone for Skybox {
         Skybox::new(self.texture.clone())
     }
 }
+
+pub struct Canvas {
+    vertices: Vec<Vertex>,
+    indices: Vec<u32>,
+    vao: VertexArray,
+    vbo: Buffer,
+    ebo: Buffer,
+}
+
+impl Canvas {
+    pub fn new() -> Self {
+        let vao = VertexArray::new().expect("Couldn't make a VAO");
+        let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
+        let ebo = Buffer::new().expect("Couldn't make the indices buffer");
+
+        let mut vertices = vec![
+            Vertex::new(-1.0, 1.0, 0.0),
+            Vertex::new(1.0, 1.0, 0.0),
+            Vertex::new(-1.0, -1.0, 0.0),
+            Vertex::new(1.0, -1.0, 0.0),
+        ];
+        let indices = vec![0, 2, 1, 1, 2, 3];
+
+        let main_vertex = vertices[indices[0] as usize];
+        let v1 = vertices[indices[1] as usize];
+        let v2 = vertices[indices[2] as usize];
+        let normal = normalize(&cross(
+            &(v1.pos - main_vertex.pos),
+            &(v2.pos - main_vertex.pos),
+        ));
+        for i in 0..4 {
+            vertices[i].normal = normal;
+            vertices[i].tex_coords = vec3((i % 2) as f32, (i as i32 / -2 + 1) as f32, 0.0);
+        }
+        let square = Canvas {
+            vertices,
+            indices,
+            vao,
+            vbo,
+            ebo,
+        };
+        square.setup_mesh();
+        square
+    }
+    fn setup_mesh(&self) {
+        self.vao.bind();
+
+        self.vbo.bind(BufferType::Array);
+        buffer_data(
+            BufferType::Array,
+            bytemuck::cast_slice(&self.vertices),
+            GL_STATIC_DRAW,
+        );
+
+        self.ebo.bind(BufferType::ElementArray);
+        buffer_data(
+            BufferType::ElementArray,
+            bytemuck::cast_slice(&self.indices),
+            GL_STATIC_DRAW,
+        );
+
+        unsafe {
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(
+                0,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, pos) as *const _, // might seem redundant, but it's just in case the order changes
+            );
+        }
+    }
+}
+
+impl Draw for Canvas {
+    fn draw(&self, shader: &ShaderProgram) {
+        self.vao.bind();
+        unsafe {
+            glDrawElements(
+                GL_TRIANGLES,
+                self.indices.len() as i32,
+                GL_UNSIGNED_INT,
+                std::ptr::null(),
+            );
+        }
+        VertexArray::clear_binding();
+    }
+    fn clone_box(&self) -> Box<dyn Draw> {
+        Box::new(Canvas::new())
+    }
+}

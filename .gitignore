@@ -1,4 +1,5 @@
 /target
 .vscode
 .gitignore
+Cargo.lock
 /src/resources/models/

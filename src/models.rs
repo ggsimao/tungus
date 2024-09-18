@@ -90,16 +90,26 @@ impl Model {
         }
 
         let m_material = &scene.materials[mesh.material_index as usize];
-        let diffuse_maps = self.load_material_textures(
+        let mut diffuse_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Diffuse,
             TextureType::Diffuse,
         );
-        let specular_maps = self.load_material_textures(
+        if diffuse_maps.len() == 0 {
+            let clr = Texture2D::new(TextureType::Diffuse);
+            clr.from_color(&self.load_material_color(&m_material, TextureType::Diffuse));
+            diffuse_maps = vec![clr];
+        }
+        let mut specular_maps = self.load_material_textures(
             &m_material,
             material::TextureType::Specular,
             TextureType::Specular,
         );
+        if specular_maps.len() == 0 {
+            let clr = Texture2D::new(TextureType::Specular);
+            clr.from_color(&self.load_material_color(&m_material, TextureType::Specular));
+            specular_maps = vec![clr];
+        }
         let shininess = self.load_shininess(&m_material);
 
         let material = Material::new(diffuse_maps, specular_maps, shininess);
@@ -116,6 +126,21 @@ impl Model {
         }
         0.0
     }
+    fn load_material_color(&mut self, mat: &material::Material, typename: TextureType) -> Vec3 {
+        let key_name = match typename {
+            TextureType::Attachment => "",
+            TextureType::Diffuse => "$clr.diffuse",
+            TextureType::Specular => "$clr.specular",
+        };
+        for property in &mat.properties {
+            if property.key == key_name {
+                if let material::PropertyTypeInfo::FloatArray(data_float) = &property.data {
+                    return vec3(data_float[0], data_float[1], data_float[2]);
+                }
+            }
+        }
+        vec3(0.0, 0.0, 0.0)
+    }
     fn load_material_textures(
         &mut self,
         mat: &material::Material,
@@ -124,7 +149,8 @@ impl Model {
     ) -> Vec<Texture2D> {
         let mut textures = vec![];
         'properties_loop: for property in &mat.properties {
-            if property.semantic == ttype && property.key == "$tex.file" {
+            if property.semantic == ttype {
+                // && property.key == "$tex.file" {
                 let dir_path = Path::new(&self.directory);
                 if let material::PropertyTypeInfo::String(data_string) = &property.data {
                     let tex_path = Path::new(data_string);

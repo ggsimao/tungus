@@ -4,6 +4,7 @@ use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::vec3;
 use nalgebra_glm::*;
+use std::ffi::c_void;
 use std::ffi::CString;
 use std::path::Path;
 
@@ -72,14 +73,14 @@ impl Shader {
 
     pub fn from_source(ty: ShaderType, path: &Path) -> Result<Self, String> {
         let source = helpers::read_from_file(path);
-        let id = Self::new(ty).ok_or_else(|| "Couldn't allocate new shader".to_string())?;
-        id.set_source(&source[..]);
-        id.compile();
-        if id.compile_success() {
-            Ok(id)
+        let obj = Self::new(ty).ok_or_else(|| "Couldn't allocate new shader".to_string())?;
+        obj.set_source(&source[..]);
+        obj.compile();
+        if obj.compile_success() {
+            Ok(obj)
         } else {
-            let out = id.info_log();
-            id.delete();
+            let out = obj.info_log();
+            obj.delete();
             Err(out)
         }
     }
@@ -87,6 +88,7 @@ impl Shader {
 
 pub enum ShaderType {
     VertexShader = GL_VERTEX_SHADER.0 as isize,
+    GeometryShader = GL_GEOMETRY_SHADER.0 as isize,
     FragmentShader = GL_FRAGMENT_SHADER.0 as isize,
 }
 
@@ -160,6 +162,30 @@ impl ShaderProgram {
         }
     }
 
+    pub fn from_vert_geo_frag(vert: &str, geo: &str, frag: &str) -> Result<Self, String> {
+        let p = Self::new().ok_or_else(|| "Couldn't allocate a program".to_string())?;
+        let v = Shader::from_source(ShaderType::VertexShader, &Path::new(vert))
+            .map_err(|e| format!("Vertex Compile Error: {}", e))?;
+        let g = Shader::from_source(ShaderType::GeometryShader, &Path::new(geo))
+            .map_err(|e| format!("Geometry Compile Error: {}", e))?;
+        let f = Shader::from_source(ShaderType::FragmentShader, &Path::new(frag))
+            .map_err(|e| format!("Fragment Compile Error: {}", e))?;
+        p.attach_shader(&v);
+        p.attach_shader(&g);
+        p.attach_shader(&f);
+        p.link_program();
+        v.delete();
+        g.delete();
+        f.delete();
+        if p.link_success() {
+            Ok(p)
+        } else {
+            let out = format!("Program Link Error: {}", p.info_log());
+            p.delete();
+            Err(out)
+        }
+    }
+
     fn get_uniform_location(&self, name: &str) -> i32 {
         let uniform_name = CString::new(name.as_bytes()).unwrap().into_raw() as *const u8;
         let location: i32;
@@ -197,6 +223,7 @@ impl ShaderProgram {
         let location = self.get_uniform_location(name);
         unsafe { glUniformMatrix3fv(location, 1, 0, value.as_ptr()) }
     }
+    #[allow(non_snake_case)]
     pub fn set_texture2D(&self, texture_name: &str, value: &Texture2D) {
         unsafe {
             glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
@@ -228,8 +255,8 @@ impl ShaderProgram {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
             diffuse.bind();
-            let name = format!("{}.Diffuse[{}]", material_name, i);
-            self.set_1i(&name, i as i32);
+            let name = format!("{}.diffuseTextures[{}]", material_name, i);
+            self.set_1i(&name, tex_count as i32);
             tex_count += 1;
         }
         for (i, specular) in specular_vector.iter().enumerate() {
@@ -237,10 +264,20 @@ impl ShaderProgram {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
             }
             specular.bind();
-            let name = format!("{}.Specular[{}]", material_name, i);
-            self.set_1i(&name, i as i32);
+            let name = format!("{}.specularTextures[{}]", material_name, i);
+            self.set_1i(&name, tex_count as i32);
             tex_count += 1;
         }
+        // if diffuse_vector.len() == 0 {
+            // unsafe {
+            //     glActiveTexture(GLenum(1 as u32));
+            // }
+            // let diff = Texture2D::new(crate::textures::TextureType::Diffuse);
+            // diff.from_color(&vec3(1.0, 0.0, 0.0));
+            // diff.bind();
+            // let name = format!("{}.diffuseTextures[0]", material_name);
+            // self.set_1i(&name, 1 as i32);
+        // }
         self.set_1f(
             &format!("{}.shininess", material_name),
             value.get_shininess(),

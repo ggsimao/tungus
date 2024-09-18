@@ -311,7 +311,6 @@ impl UniformBuffer {
     }
 
     pub fn set_model_mat(&self, model: &Mat4) {
-        // self.set_matrix_4fv("modelMat", model);
         self.bind();
         unsafe {
             glBufferSubData(GL_UNIFORM_BUFFER, 0, 64, model.as_ptr().cast());
@@ -319,8 +318,6 @@ impl UniformBuffer {
         Self::clear_binding();
     }
     pub fn set_view_mat(&self, view: &Mat4) {
-        // self.set_matrix_4fv("viewMat", view);
-        // self.set_3f("viewPos", &camera.get_pos());
         self.bind();
         unsafe {
             glBufferSubData(GL_UNIFORM_BUFFER, 64, 64, view.as_ptr().cast());
@@ -328,7 +325,6 @@ impl UniformBuffer {
         Self::clear_binding();
     }
     pub fn set_projection_mat(&self, proj: &Mat4) {
-        // self.set_matrix_4fv("projMat", proj);
         self.bind();
         unsafe {
             glBufferSubData(GL_UNIFORM_BUFFER, 128, 64, proj.as_ptr().cast());
@@ -336,7 +332,6 @@ impl UniformBuffer {
         Self::clear_binding();
     }
     pub fn set_normal_mat(&self, normal: &Mat3) {
-        // self.set_matrix_3fv("normalMat", normal);
         self.bind();
         unsafe {
             glBufferSubData(GL_UNIFORM_BUFFER, 192, 48, normal.as_ptr().cast());

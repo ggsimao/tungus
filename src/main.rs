@@ -4,29 +4,29 @@
 #![allow(clippy::zero_ptr)]
 #![feature(offset_of)]
 
-// use assimp;
 use beryllium::*;
-use camera::{Camera, CameraController};
-use controls::{Controller, SignalHandler};
 use core::{
     convert::{TryFrom, TryInto},
     mem::{size_of, size_of_val},
     ptr::null,
 };
-use data::{Buffer, BufferType, Framebuffer, PolygonMode, UniformBuffer, VertexArray};
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
-use meshes::{BasicMesh, Draw, Skybox, Vertex};
-use models::Model;
 use nalgebra_glm::*;
 use russimp::light::Light;
-use scene::{Scene, SceneObject};
+use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
+
+use camera::{Camera, CameraController};
+use controls::{Controller, SignalHandler};
+use data::{Buffer, BufferType, Framebuffer, PolygonMode, UniformBuffer, VertexArray};
+use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
+use meshes::{BasicMesh, Canvas, Draw, Skybox, Vertex};
+use models::Model;
+use scene::{Scene, SceneController, SceneObject, SceneParameters};
 use screen::{Screen, ScreenController};
 use shaders::{Shader, ShaderProgram, ShaderType};
-use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
 use systems::{Program, ProgramController};
 use textures::{CubeMap, Material, Texture2D, TextureType};
 
@@ -45,8 +45,10 @@ pub mod textures;
 
 // const SHADERS: &str = "./src/shaders/"
 const REGULAR_VERT_SHADER: &str = "./src/shaders/regular_vert_shader.vs";
-const FRAG_SHADER_OBJECT: &str = "./src/shaders/object_frag_shader.fs";
-const FRAG_SHADER_BUFFER: &str = "./src/shaders/buffer_frag_shader.fs";
+const OBJECT_FRAG_SHADER: &str = "./src/shaders/object_frag_shader.fs";
+const DEBUG_GEO_SHADER: &str = "./src/shaders/debug_geo_shader.gs";
+const DEBUG_FRAG_SHADER: &str = "./src/shaders/debug_frag_shader.fs";
+const BUFFER_FRAG_SHADER: &str = "./src/shaders/buffer_frag_shader.fs";
 const SCREEN_VERT_SHADER: &str = "./src/shaders/screen_vert_shader.vs";
 const SCREEN_FRAG_SHADER: &str = "./src/shaders/screen_frag_shader.fs";
 const SKYBOX_VERT_SHADER: &str = "./src/shaders/skybox_vert_shader.vs";
@@ -60,7 +62,8 @@ const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
 const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
 const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
 
-const ABSTRACT_CUBE: &str = "./src/resources/models/cube.obj";
+const ABSTRACT_CUBE: &str = "./src/resources/models/untitled.obj";
+// const ABSTRACT_CUBE: &str = "./src/resources/models/cube.obj";
 
 const SKYBOX_FACES: [&str; 6] = [
     "./src/resources/textures/skybox/right.jpg",
@@ -207,15 +210,18 @@ fn main() {
         objects_list.push(&lamp_objects[i]);
     }
 
-    let canvas = SceneObject::from(BasicMesh::square(2.0));
-    let mirror = SceneObject::from(BasicMesh::square(2.0));
+    let canvas = SceneObject::from(Canvas::new());
+    let mirror = SceneObject::from(Canvas::new());
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Shader initialization
     let shader_program_model =
-        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_OBJECT).unwrap();
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, OBJECT_FRAG_SHADER).unwrap();
+    let shader_program_debug =
+        ShaderProgram::from_vert_geo_frag(REGULAR_VERT_SHADER, DEBUG_GEO_SHADER, DEBUG_FRAG_SHADER)
+            .unwrap();
     let shader_program_outline =
-        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, FRAG_SHADER_BUFFER).unwrap();
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, BUFFER_FRAG_SHADER).unwrap();
     let shader_program_screen =
         ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap();
     let shader_program_skybox =
@@ -254,19 +260,26 @@ fn main() {
     let flashlight_controller = FlashlightController::new();
     let program_controller = ProgramController::new();
     let screen_controller = ScreenController::new();
+    let scene_controller = SceneController::new();
     let mut signal_handler = SignalHandler::new(&sdl);
     signal_handler.connect(camera_controller.clone());
     signal_handler.connect(flashlight_controller.clone());
     signal_handler.connect(program_controller.clone());
     signal_handler.connect(screen_controller.clone());
+    signal_handler.connect(scene_controller.clone());
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Program loop
-    let mut program_loop = Program { loop_active: true };
+    let mut program_loop = Program {
+        loop_active: true,
+        timer: &|| sdl.get_ticks(),
+    };
     let (mut elapsed_time, mut previous_time): (u32, u32);
 
     elapsed_time = 0;
     let mut cycle_time;
+
+    let mut scene_params = SceneParameters::init();
 
     while program_loop.loop_active {
         previous_time = elapsed_time;
@@ -281,6 +294,7 @@ fn main() {
         flashlight_controller.process_signals(&mut lighting.spot);
         program_controller.process_signals(&mut program_loop);
         screen_controller.process_signals(&mut screen);
+        scene_controller.process_signals(&mut scene_params);
         lighting.spot.pos = main_camera.get_pos();
         lighting.spot.dir = main_camera.get_dir();
         // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
@@ -292,8 +306,10 @@ fn main() {
             object_shader: &shader_program_model,
             skybox_shader: &shader_program_skybox,
             outline_shader: &shader_program_outline,
+            debug_shader: &shader_program_debug,
             camera: &main_camera,
             lighting: &lighting,
+            params: &scene_params,
         };
         mirror_camera = main_camera.invert();
         let mirrored_scene = Scene {
@@ -302,9 +318,14 @@ fn main() {
             object_shader: &shader_program_model,
             skybox_shader: &shader_program_skybox,
             outline_shader: &shader_program_outline,
+            debug_shader: &shader_program_debug,
             camera: &mirror_camera,
             lighting: &lighting,
+            params: &scene_params,
         };
+
+        shader_program_model.use_program();
+        shader_program_model.set_1f("time", sdl.get_ticks() as f32 / 500.0);
 
         screen.draw_on_framebuffer(&scene);
         mirrored_screen.draw_on_framebuffer(&mirrored_scene);
@@ -312,5 +333,6 @@ fn main() {
         screen.draw_on_screen();
 
         win.swap_window();
+        // println!("win.swap_window();");
     }
 }

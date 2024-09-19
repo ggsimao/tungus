@@ -1,11 +1,16 @@
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::rc::Rc;
+use std::time::SystemTime;
 
 use crate::camera::Camera;
+use crate::controls::{Controller, SignalType, Slot};
 use crate::data::UniformBuffer;
 use crate::lighting::Lighting;
 use crate::meshes::{BasicMesh, Draw};
 use crate::models::Model;
 use crate::shaders::ShaderProgram;
+use beryllium::Keycode;
 use gl33::gl_enumerations::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
@@ -98,14 +103,73 @@ impl Draw for SceneObject {
     }
 }
 
+pub struct SceneParameters {
+    pub visualize_normals: bool,
+    pub start: SystemTime,
+}
+
+impl SceneParameters {
+    pub fn init() -> Self {
+        Self {
+            visualize_normals: false,
+            start: SystemTime::now(),
+        }
+    }
+}
+
+pub struct SceneController {
+    pub signal_list: Vec<SignalType>,
+    visualize_normals: bool,
+}
+
+impl SceneController {
+    pub fn new() -> Rc<RefCell<SceneController>> {
+        Rc::new(RefCell::new(Self {
+            signal_list: vec![],
+            visualize_normals: false,
+        }))
+    }
+    pub fn on_key_pressed(&mut self, keycode: Keycode) {
+        match keycode {
+            Keycode::N => self.visualize_normals = !self.visualize_normals,
+            _ => (),
+        }
+    }
+}
+
+impl<'a> Slot<'a> for SceneController {
+    fn on_signal(&mut self, signal: SignalType) {
+        self.signal_list.push(signal);
+    }
+}
+
+impl<'a> Controller<'a, SceneParameters, SceneController> for Rc<RefCell<SceneController>> {
+    fn update_control_parameters(&self, update: &'a mut (dyn FnMut(&mut SceneController))) {
+        update(&mut (**self).borrow_mut());
+    }
+    fn process_signals(&'a self, obj: &mut SceneParameters) {
+        let mut self_obj = (**self).borrow_mut();
+        for signal in self_obj.signal_list.clone() {
+            match signal {
+                SignalType::KeyPressed(key) => self_obj.on_key_pressed(key),
+                _ => (),
+            }
+        }
+        obj.visualize_normals = self_obj.visualize_normals;
+        self_obj.signal_list.clear();
+    }
+}
+
 pub struct Scene<'a> {
     pub objects: &'a Vec<&'a SceneObject>,
     pub skyboxes: &'a Vec<&'a SceneObject>,
     pub object_shader: &'a ShaderProgram,
     pub skybox_shader: &'a ShaderProgram,
     pub outline_shader: &'a ShaderProgram,
+    pub debug_shader: &'a ShaderProgram,
     pub camera: &'a Camera,
     pub lighting: &'a Lighting,
+    pub params: &'a SceneParameters,
 }
 
 impl<'a> Scene<'a> {
@@ -116,8 +180,9 @@ impl<'a> Scene<'a> {
         ordered_objects.sort_by(|a, b| self.distance_compare(a, b));
 
         let projection = perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
+        let view = self.camera.look_at();
 
-        ubo.set_view_mat(&self.camera.look_at());
+        ubo.set_view_mat(&view);
         ubo.set_projection_mat(&projection);
 
         self.object_shader.use_program();
@@ -126,11 +191,17 @@ impl<'a> Scene<'a> {
             ubo.set_model_mat(&object.get_model());
             ubo.set_normal_mat(&object.get_normal());
             object.draw(&self.object_shader);
+            if self.params.visualize_normals {
+                self.debug_shader.use_program();
+                object.draw(&self.debug_shader);
+                self.object_shader.use_program();
+            }
             if object.has_outline() {
                 self.outline_shader.use_program();
                 let outline_scale = scale(&object.get_model(), &vec3(1.1, 1.1, 1.1));
                 ubo.set_model_mat(&outline_scale);
                 object.draw_outline(&self.outline_shader);
+                self.object_shader.use_program();
             }
         }
 

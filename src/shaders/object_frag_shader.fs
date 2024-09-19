@@ -9,8 +9,8 @@ in VERTEX {
 #define NR_SPECULAR_TEXTURES 3
 
 struct Material {
-    sampler2D Diffuse[NR_DIFFUSE_TEXTURES];
-    sampler2D Specular[NR_SPECULAR_TEXTURES];
+    sampler2D diffuseTextures[NR_DIFFUSE_TEXTURES];
+    sampler2D specularTextures[NR_SPECULAR_TEXTURES];
     float shininess;
     int loadedDiffuse;
     int loadedSpecular;
@@ -151,9 +151,9 @@ vec4 calculateSpotlight(Spotlight light, vec3 normal, vec3 fragPos, vec3 viewDir
 
 void main() {
     for (int i = 0; i < material.loadedDiffuse; i++)
-        diff_tex_values[i] = texture(material . Diffuse[i], fs_in.texCoords);
+        diff_tex_values[i] = texture(material . diffuseTextures[i], fs_in.texCoords);
     for (int i = 0; i < material.loadedSpecular; i++)
-        spec_tex_values[i] = texture(material . Specular[i], fs_in.texCoords);
+        spec_tex_values[i] = texture(material . specularTextures[i], fs_in.texCoords);
 
     vec3 norm = normalize(fs_in.normal);
     vec3 viewPos = vec3(viewMat[3][0], viewMat[3][1], viewMat[3][2]);

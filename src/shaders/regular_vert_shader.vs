@@ -16,10 +16,13 @@ out VERTEX {
     vec2 texCoords;
 } vs_out;
 
+out vec3 geo_normal;
+
 void main() {
     gl_Position = vec4(aPos, 1.0);
     gl_Position = projMat * viewMat * modelMat * gl_Position;
     vs_out.pos = vec3(modelMat * vec4(aPos, 1.0));
     vs_out.normal = normalMat * aNormal;
+    geo_normal = aNormal;
     vs_out.texCoords = aTexCoord;
 }

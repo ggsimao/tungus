@@ -4,8 +4,9 @@ use beryllium::Keycode;
 
 use crate::controls::{Controller, SignalHandler, SignalType, Slot};
 
-pub struct Program {
+pub struct Program<'a> {
     pub loop_active: bool,
+    pub timer: &'a dyn Fn() -> u32,
 }
 
 pub struct ProgramController {
@@ -34,7 +35,7 @@ impl<'a> Slot<'a> for ProgramController {
     }
 }
 
-impl<'a> Controller<'a, Program, ProgramController> for Rc<RefCell<ProgramController>> {
+impl<'a> Controller<'a, Program<'a>, ProgramController> for Rc<RefCell<ProgramController>> {
     fn update_control_parameters(&self, update: &'a mut (dyn FnMut(&mut ProgramController))) {
         update(&mut (**self).borrow_mut());
     }

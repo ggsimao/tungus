@@ -2,6 +2,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
+use nalgebra_glm::*;
 use stb_image::stb_image::bindgen::*;
 use std::ffi::c_void;
 use std::ffi::CString;
@@ -67,6 +68,49 @@ impl Texture2D {
             glBindTexture(GL_TEXTURE_2D, 0);
         }
         self.path = path.display().to_string();
+    }
+    // pub fn empty_texture(&self) {
+    //     let data: [u8; 4] = [0, 0, 0, 0];
+    //     unsafe {
+    //         glBindTexture(GL_TEXTURE_2D, self.id);
+    //         glTexImage2D(
+    //             GL_TEXTURE_2D,
+    //             0,
+    //             GL_RGBA.0 as i32,
+    //             1,
+    //             1,
+    //             0,
+    //             GL_RGBA,
+    //             GL_UNSIGNED_BYTE,
+    //             data.as_ptr() as *const c_void,
+    //         );
+    //         glGenerateMipmap(GL_TEXTURE_2D);
+    //         glBindTexture(GL_TEXTURE_2D, 0);
+    //     }
+    // }
+    pub fn from_color(&self, color: &Vec3) {
+        let data: [u8; 4] = [
+            (color.x * 255.0) as u8,
+            (color.y * 255.0) as u8,
+            (color.z * 255.0) as u8,
+            255,
+        ];
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, self.id);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA.0 as i32,
+                1,
+                1,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                data.as_ptr() as *const c_void,
+            );
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
     }
 
     pub fn bind(&self) {

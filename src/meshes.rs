@@ -162,7 +162,7 @@ impl BasicMesh {
             normals[indices[i * 6 + 5] as usize] += normal;
         }
         for i in 0..24 {
-            vertices[i].normal = normals[i];
+            vertices[i].normal = normals[i] / 4.0;
             vertices[i].tex_coords = vec3((i % 2) as f32, ((i / 2) % 2) as f32, 0.0);
         }
         let cube = BasicMesh {
@@ -315,31 +315,40 @@ impl Skybox {
             Vertex::new(5.0, 5.0, -5.0),
             Vertex::new(-5.0, 5.0, 5.0),
             Vertex::new(5.0, 5.0, 5.0),
+
             Vertex::new(-5.0, -5.0, -5.0),
             Vertex::new(5.0, -5.0, -5.0),
             Vertex::new(-5.0, -5.0, 5.0),
             Vertex::new(5.0, -5.0, 5.0),
-            Vertex::new(-5.0, 5.0, -5.0),
+
             Vertex::new(5.0, 5.0, -5.0),
-            Vertex::new(-5.0, -5.0, -5.0),
-            Vertex::new(5.0, -5.0, -5.0),
-            Vertex::new(5.0, 5.0, -5.0),
-            Vertex::new(5.0, 5.0, 5.0),
-            Vertex::new(5.0, -5.0, -5.0),
-            Vertex::new(5.0, -5.0, 5.0),
-            Vertex::new(5.0, 5.0, 5.0),
-            Vertex::new(-5.0, 5.0, 5.0),
-            Vertex::new(5.0, -5.0, 5.0),
-            Vertex::new(-5.0, -5.0, 5.0),
-            Vertex::new(-5.0, 5.0, 5.0),
             Vertex::new(-5.0, 5.0, -5.0),
-            Vertex::new(-5.0, -5.0, 5.0),
+            Vertex::new(5.0, -5.0, -5.0),
             Vertex::new(-5.0, -5.0, -5.0),
+
+            Vertex::new(5.0, 5.0, 5.0),
+            Vertex::new(5.0, 5.0, -5.0),
+            Vertex::new(5.0, -5.0, 5.0),
+            Vertex::new(5.0, -5.0, -5.0),
+
+            Vertex::new(-5.0, 5.0, 5.0),
+            Vertex::new(5.0, 5.0, 5.0),
+            Vertex::new(-5.0, -5.0, 5.0),
+            Vertex::new(5.0, -5.0, 5.0),
+
+            Vertex::new(-5.0, 5.0, -5.0),
+            Vertex::new(-5.0, 5.0, 5.0),
+            Vertex::new(-5.0, -5.0, -5.0),
+            Vertex::new(-5.0, -5.0, 5.0),
         ];
 
         let indices = [
-            0, 2, 1, 1, 2, 3, 5, 6, 4, 7, 6, 5, 9, 10, 8, 11, 10, 9, 13, 14, 12, 15, 14, 13, 17,
-            18, 16, 19, 18, 17, 21, 22, 20, 23, 22, 21,
+            0, 2, 1, 1, 2, 3, 
+            4, 5, 6, 6, 5, 7,
+            8, 10, 9, 9, 10, 11,
+            12, 14, 13, 13, 14, 15,
+            16, 18, 17, 17, 18, 19,
+            20, 22, 21, 21, 22, 23
         ];
 
         let skybox = Skybox {
@@ -415,8 +424,8 @@ impl Clone for Skybox {
 }
 
 pub struct Canvas {
-    vertices: Vec<Vertex>,
-    indices: Vec<u32>,
+    pub vertices: [Vertex; 4],
+    pub indices: [u32; 6],
     vao: VertexArray,
     vbo: Buffer,
     ebo: Buffer,
@@ -428,25 +437,19 @@ impl Canvas {
         let vbo = Buffer::new().expect("Couldn't make the vertex buffer");
         let ebo = Buffer::new().expect("Couldn't make the indices buffer");
 
-        let mut vertices = vec![
+        let mut vertices = [
             Vertex::new(-1.0, 1.0, 0.0),
             Vertex::new(1.0, 1.0, 0.0),
             Vertex::new(-1.0, -1.0, 0.0),
             Vertex::new(1.0, -1.0, 0.0),
         ];
-        let indices = vec![0, 2, 1, 1, 2, 3];
+        let indices = [0, 2, 1, 1, 2, 3];
 
-        let main_vertex = vertices[indices[0] as usize];
-        let v1 = vertices[indices[1] as usize];
-        let v2 = vertices[indices[2] as usize];
-        let normal = normalize(&cross(
-            &(v1.pos - main_vertex.pos),
-            &(v2.pos - main_vertex.pos),
-        ));
-        for i in 0..4 {
-            vertices[i].normal = normal;
-            vertices[i].tex_coords = vec3((i % 2) as f32, (i as i32 / -2 + 1) as f32, 0.0);
-        }
+        vertices[0].tex_coords = vec3(0.0, 1.0, 0.0);
+        vertices[1].tex_coords = vec3(1.0, 1.0, 0.0);
+        vertices[2].tex_coords = vec3(0.0, 0.0, 0.0);
+        vertices[3].tex_coords = vec3(1.0, 0.0, 0.0);
+        
         let square = Canvas {
             vertices,
             indices,
@@ -484,12 +487,21 @@ impl Canvas {
                 core::mem::size_of::<Vertex>().try_into().unwrap(),
                 core::mem::offset_of!(Vertex, pos) as *const _, // might seem redundant, but it's just in case the order changes
             );
+            glEnableVertexAttribArray(1);
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE.0 as u8,
+                core::mem::size_of::<Vertex>().try_into().unwrap(),
+                core::mem::offset_of!(Vertex, tex_coords) as *const _,
+            );
         }
     }
 }
 
 impl Draw for Canvas {
-    fn draw(&self, shader: &ShaderProgram) {
+    fn draw(&self, _shader: &ShaderProgram) {
         self.vao.bind();
         unsafe {
             glDrawElements(

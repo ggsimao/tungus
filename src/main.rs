@@ -5,31 +5,30 @@
 #![feature(offset_of)]
 
 use beryllium::*;
-use camera::{Camera, CameraController};
-use controls::{Controller, SignalHandler};
 use core::{
     convert::{TryFrom, TryInto},
     mem::{size_of, size_of_val},
     ptr::null,
 };
-use data::{Buffer, BufferType, Framebuffer, PolygonMode, UniformBuffer, VertexArray};
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
-use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
-use meshes::{BasicMesh, Draw, Skybox, Vertex};
-use models::Model;
 use nalgebra_glm::*;
 use russimp::light::Light;
-use scene::{Scene, SceneObject};
+use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
+
+use camera::{Camera, CameraController};
+use controls::{Controller, SignalHandler};
+use data::{Buffer, BufferType, Framebuffer, PolygonMode, UniformBuffer, VertexArray};
+use lighting::{DirectionalLight, FlashlightController, Lighting, PointLight, Spotlight};
+use meshes::{BasicMesh, Canvas, Draw, Skybox, Vertex};
+use models::Model;
+use scene::{Scene, SceneController, SceneObject, SceneParameters};
 use screen::{Screen, ScreenController};
 use shaders::{Shader, ShaderProgram, ShaderType};
-use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
 use systems::{Program, ProgramController};
 use textures::{CubeMap, Material, Texture2D, TextureType};
-
-use crate::scene::{SceneController, SceneParameters};
 
 pub mod camera;
 pub mod controls;
@@ -211,15 +210,15 @@ fn main() {
         objects_list.push(&lamp_objects[i]);
     }
 
-    let canvas = SceneObject::from(BasicMesh::square(2.0));
-    let mirror = SceneObject::from(BasicMesh::square(2.0));
+    let canvas = SceneObject::from(Canvas::new());
+    let mirror = SceneObject::from(Canvas::new());
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Shader initialization
     let shader_program_model =
         ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, OBJECT_FRAG_SHADER).unwrap();
     let shader_program_debug =
-        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, DEBUG_FRAG_SHADER)
+        ShaderProgram::from_vert_geo_frag(REGULAR_VERT_SHADER, DEBUG_GEO_SHADER, DEBUG_FRAG_SHADER)
             .unwrap();
     let shader_program_outline =
         ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, BUFFER_FRAG_SHADER).unwrap();
@@ -334,6 +333,6 @@ fn main() {
         screen.draw_on_screen();
 
         win.swap_window();
-        println!("win.swap_window();");
+        // println!("win.swap_window();");
     }
 }

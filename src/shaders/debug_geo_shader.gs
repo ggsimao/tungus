@@ -25,12 +25,6 @@ layout (std140, binding = 0) uniform Matrices {
 
 const float MAGNITUDE = 0.1;
 
-vec3 get_normal(vec4[3] pos_vec) {
-    vec3 a = vec3(pos_vec[2]) - vec3(pos_vec[1]);
-    vec3 b = vec3(pos_vec[0]) - vec3(pos_vec[1]);
-    return normalize(cross(a, b));
-}
-
 void generate_line(int index, vec3 normal) {
     mat4 calcMat = projMat * viewMat;
     gl_Position = calcMat * vec4(gs_in[index].pos, 1.0);

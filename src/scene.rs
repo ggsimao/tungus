@@ -96,7 +96,6 @@ impl SceneObject {
 
 impl Draw for SceneObject {
     fn draw(&self, shader: &ShaderProgram) {
-        // println!("{:?}", (self.position.x, self.position.y, self.position.z));
         self.drawable.draw(shader);
     }
     fn clone_box(&self) -> Box<dyn Draw> {
@@ -192,11 +191,11 @@ impl<'a> Scene<'a> {
             ubo.set_model_mat(&object.get_model());
             ubo.set_normal_mat(&object.get_normal());
             object.draw(&self.object_shader);
-            // if self.params.visualize_normals {
-            //     self.debug_shader.use_program();
-            //     object.draw(&self.debug_shader);
-            //     self.object_shader.use_program();
-            // }
+            if self.params.visualize_normals {
+                self.debug_shader.use_program();
+                object.draw(&self.debug_shader);
+                self.object_shader.use_program();
+            }
             if object.has_outline() {
                 self.outline_shader.use_program();
                 let outline_scale = scale(&object.get_model(), &vec3(1.1, 1.1, 1.1));

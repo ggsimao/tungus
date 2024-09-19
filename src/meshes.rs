@@ -105,31 +105,40 @@ impl BasicMesh {
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, side / 2.0, side / 2.0),
+
             Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-            Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
+
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
-            Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
-            Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
-            Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
-            Vertex::new(side / 2.0, side / 2.0, side / 2.0),
-            Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
-            Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-            Vertex::new(side / 2.0, side / 2.0, side / 2.0),
-            Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
-            Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-            Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
-            Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
-            Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
+
+            Vertex::new(side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
+
+            Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
+            Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
+
+            Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
+            Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
+            Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
+            Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
         ];
 
         let indices = vec![
-            0, 2, 1, 1, 2, 3, 5, 6, 4, 7, 6, 5, 9, 10, 8, 11, 10, 9, 13, 14, 12, 15, 14, 13, 17,
-            18, 16, 19, 18, 17, 21, 22, 20, 23, 22, 21,
+            0, 2, 1, 1, 2, 3, 
+            4, 5, 6, 6, 5, 7,
+            8, 10, 9, 9, 10, 11,
+            12, 14, 13, 13, 14, 15,
+            16, 18, 17, 17, 18, 19,
+            20, 22, 21, 21, 22, 23
         ];
         let mut normals = [Vec3::zeros(); 24];
 
@@ -153,8 +162,8 @@ impl BasicMesh {
             normals[indices[i * 6 + 5] as usize] += normal;
         }
         for i in 0..24 {
-            vertices[i].normal = normals[i] / 4.0;
-            vertices[i].tex_coords = vec3((i % 2) as f32, (i / 2) as f32, 0.0);
+            vertices[i].normal = normals[i];
+            vertices[i].tex_coords = vec3((i % 2) as f32, ((i / 2) % 2) as f32, 0.0);
         }
         let cube = BasicMesh {
             vertices,

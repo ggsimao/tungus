@@ -24,9 +24,8 @@ uniform vec3 outlineColor;
 void main() {
     float texture_alpha = 0.0;
     for (int i = 0; i < material.loadedDiffuse; i++) {
-        texture_alpha += texture(material . Diffuse[i], fs_in.texCoords).a;
+        texture_alpha = max(texture_alpha, texture(material . Diffuse[i], fs_in.texCoords).a);
     }
-    texture_alpha /= material.loadedDiffuse;
 
     if (texture_alpha == 0) {
         discard;

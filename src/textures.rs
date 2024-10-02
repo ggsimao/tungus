@@ -9,6 +9,8 @@ use std::ffi::CString;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
+const EMPTY_DATA: [u8; 4] = [0; 4];
+
 #[derive(Copy, Clone, Debug)]
 pub enum TextureType {
     Diffuse,
@@ -69,25 +71,24 @@ impl Texture2D {
         }
         self.path = path.display().to_string();
     }
-    // pub fn empty_texture(&self) {
-    //     let data: [u8; 4] = [0, 0, 0, 0];
-    //     unsafe {
-    //         glBindTexture(GL_TEXTURE_2D, self.id);
-    //         glTexImage2D(
-    //             GL_TEXTURE_2D,
-    //             0,
-    //             GL_RGBA.0 as i32,
-    //             1,
-    //             1,
-    //             0,
-    //             GL_RGBA,
-    //             GL_UNSIGNED_BYTE,
-    //             data.as_ptr() as *const c_void,
-    //         );
-    //         glGenerateMipmap(GL_TEXTURE_2D);
-    //         glBindTexture(GL_TEXTURE_2D, 0);
-    //     }
-    // }
+    pub fn empty_texture(&self) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D, self.id);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA8.0 as i32,
+                1,
+                1,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                EMPTY_DATA.as_ptr() as *const c_void,
+            );
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+    }
     pub fn from_color(&self, color: &Vec3) {
         let data: [u8; 4] = [
             (color.x * 255.0) as u8,

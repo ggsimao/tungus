@@ -230,9 +230,9 @@ impl ShaderProgram {
         }
         value.bind();
         self.set_1i(texture_name, 0 as i32);
-        unsafe {
-            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
-        }
+        // unsafe {
+        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        // }
     }
     pub fn set_cubemap(&self, texture_name: &str, value: &CubeMap) {
         unsafe {
@@ -240,9 +240,9 @@ impl ShaderProgram {
         }
         value.bind();
         self.set_1i(texture_name, 0 as i32);
-        unsafe {
-            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
-        }
+        // unsafe {
+        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        // }
     }
     pub fn set_material(&self, material_name: &str, value: &Material) {
         let diffuse_vector = value.get_diffuse_maps();
@@ -250,6 +250,7 @@ impl ShaderProgram {
         let loaded_diffuse = diffuse_vector.len().max(1) as i32;
         let loaded_specular = specular_vector.len().max(1) as i32;
         let mut tex_count = 0;
+
         for (i, diffuse) in diffuse_vector.iter().enumerate() {
             unsafe {
                 glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
@@ -268,16 +269,28 @@ impl ShaderProgram {
             self.set_1i(&name, tex_count as i32);
             tex_count += 1;
         }
-        // if diffuse_vector.len() == 0 {
-            // unsafe {
-            //     glActiveTexture(GLenum(1 as u32));
-            // }
-            // let diff = Texture2D::new(crate::textures::TextureType::Diffuse);
-            // diff.from_color(&vec3(1.0, 0.0, 0.0));
-            // diff.bind();
-            // let name = format!("{}.diffuseTextures[0]", material_name);
-            // self.set_1i(&name, 1 as i32);
-        // }
+        if diffuse_vector.len() == 0 {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            let diff = Texture2D::new(crate::textures::TextureType::Diffuse);
+            diff.empty_texture();
+            diff.bind();
+            let name = format!("{}.diffuseTextures[0]", material_name);
+            self.set_1i(&name, tex_count as i32);
+            tex_count += 1;
+        }
+        if specular_vector.len() == 0 {
+            unsafe {
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+            }
+            let spec = Texture2D::new(crate::textures::TextureType::Specular);
+            spec.empty_texture();
+            spec.bind();
+            let name = format!("{}.specularTextures[0]", material_name);
+            self.set_1i(&name, tex_count as i32);
+        }
+
         self.set_1f(
             &format!("{}.shininess", material_name),
             value.get_shininess(),

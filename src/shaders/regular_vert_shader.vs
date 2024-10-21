@@ -2,6 +2,8 @@
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
+layout(location = 3) in mat4 aInstModel;
+layout(location = 7) in mat3 aInstNormal;
 
 layout (std140, binding = 0) uniform Matrices {
     mat4 modelMat;
@@ -20,9 +22,10 @@ out vec3 geo_normal;
 
 void main() {
     gl_Position = vec4(aPos, 1.0);
-    gl_Position = projMat * viewMat * modelMat * gl_Position;
-    vs_out.pos = vec3(modelMat * vec4(aPos, 1.0));
-    vs_out.normal = normalMat * aNormal;
+    vec4 out_pos_4 = modelMat * aInstModel * gl_Position;
+    gl_Position = projMat * viewMat * out_pos_4;
+    vs_out.pos = vec3(out_pos_4);
+    vs_out.normal = normalMat * aInstNormal * aNormal;
     geo_normal = aNormal;
     vs_out.texCoords = aTexCoord;
 }

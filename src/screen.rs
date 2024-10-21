@@ -6,6 +6,7 @@ use crate::data::{Framebuffer, UniformBuffer};
 use crate::meshes::{BasicMesh, Draw};
 use crate::scene::{Scene, SceneObject};
 use crate::shaders::ShaderProgram;
+use crate::spatial::Spatial;
 use beryllium::Keycode;
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
@@ -13,23 +14,25 @@ use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
 
-pub struct Screen<'a> {
+pub struct Screen {
     canvas: SceneObject,
     clear_color: Vec4,
     fbo: Framebuffer,
-    shader: &'a ShaderProgram,
+    shader: ShaderProgram,
     filter: bool,
-    ubo: &'a UniformBuffer,
+    ubo: UniformBuffer,
 }
 
-impl<'a> Screen<'a> {
+impl<'a> Screen {
     pub fn new(
         canvas: SceneObject,
         clear_color: Vec4,
-        fbo: Framebuffer,
-        shader: &'a ShaderProgram,
-        ubo: &'a UniformBuffer,
+        window_size: (u32, u32),
+        shader: ShaderProgram,
+        ubo: UniformBuffer,
     ) -> Self {
+        let fbo = Framebuffer::new().unwrap();
+        fbo.setup_with_renderbuffer(window_size);
         Self {
             canvas,
             clear_color,
@@ -57,7 +60,7 @@ impl<'a> Screen<'a> {
         }
     }
 
-    pub fn draw_on_framebuffer(&self, scene: &Scene) {
+    pub fn draw_on_framebuffer(&mut self, scene: &mut Scene) {
         self.fbo.bind();
         self.clear_color();
         self.clear_buffers();
@@ -76,7 +79,7 @@ impl<'a> Screen<'a> {
         self.ubo.bind_base();
 
         let mut transformed_canvas = self.canvas.clone();
-        transformed_canvas.scale(scaling);
+        transformed_canvas.scale(&vec3(scaling, scaling, scaling));
         transformed_canvas.translate(&vec3(offset.x, offset.y, 0.0));
 
         unsafe {
@@ -112,16 +115,12 @@ impl<'a> Screen<'a> {
 }
 
 pub struct ScreenController {
-    pub signal_list: Vec<SignalType>,
     filter: bool,
 }
 
 impl ScreenController {
     pub fn new() -> Rc<RefCell<ScreenController>> {
-        Rc::new(RefCell::new(Self {
-            signal_list: vec![],
-            filter: false,
-        }))
+        Rc::new(RefCell::new(Self { filter: false }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {
         match keycode {
@@ -131,25 +130,21 @@ impl ScreenController {
     }
 }
 
-impl<'a> Slot<'a> for ScreenController {
+impl<'a> Slot for ScreenController {
     fn on_signal(&mut self, signal: SignalType) {
-        self.signal_list.push(signal);
+        match signal {
+            SignalType::KeyPressed(key) => self.on_key_pressed(key),
+            _ => (),
+        }
     }
 }
 
-impl<'a> Controller<'a, Screen<'a>, ScreenController> for Rc<RefCell<ScreenController>> {
+impl<'a> Controller<'a, Screen, ScreenController> for Rc<RefCell<ScreenController>> {
     fn update_control_parameters(&self, update: &'a mut (dyn FnMut(&mut ScreenController))) {
         update(&mut (**self).borrow_mut());
     }
     fn process_signals(&'a self, obj: &mut Screen) {
-        let mut self_obj = (**self).borrow_mut();
-        for signal in self_obj.signal_list.clone() {
-            match signal {
-                SignalType::KeyPressed(key) => self_obj.on_key_pressed(key),
-                _ => (),
-            }
-        }
+        let self_obj = (**self).borrow();
         obj.filter = self_obj.filter;
-        self_obj.signal_list.clear();
     }
 }

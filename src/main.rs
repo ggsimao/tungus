@@ -3,6 +3,7 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::zero_ptr)]
 #![feature(offset_of)]
+#![feature(div_duration)]
 
 use beryllium::*;
 use core::{
@@ -15,8 +16,19 @@ use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
+use rand::Rng;
 use russimp::light::Light;
-use std::{cell::RefCell, ffi::c_void, path::Path, rc::Rc};
+use spatial::Spatial;
+use std::{
+    borrow::BorrowMut,
+    cell::RefCell,
+    collections::HashMap,
+    ffi::c_void,
+    path::Path,
+    rc::{Rc, Weak},
+    time::{Duration, Instant},
+};
+use utils::{RTController, RandomTransform};
 
 use camera::{Camera, CameraController};
 use controls::{Controller, SignalHandler};
@@ -33,15 +45,16 @@ use textures::{CubeMap, Material, Texture2D, TextureType};
 pub mod camera;
 pub mod controls;
 pub mod data;
-pub mod helpers;
 pub mod lighting;
 pub mod meshes;
 pub mod models;
 pub mod scene;
 pub mod screen;
 pub mod shaders;
+pub mod spatial;
 pub mod systems;
 pub mod textures;
+pub mod utils;
 
 // const SHADERS: &str = "./src/shaders/"
 const REGULAR_VERT_SHADER: &str = "./src/shaders/regular_vert_shader.vs";
@@ -62,8 +75,8 @@ const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
 const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
 const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
 
-const ABSTRACT_CUBE: &str = "./src/resources/models/untitled.obj";
-// const ABSTRACT_CUBE: &str = "./src/resources/models/cube.obj";
+const ABSTRACT_CUBE: &str = "./src/resources/models/cube/untitled.obj";
+const ROCK_1: &str = "./src/resources/models/rocks/rock.obj";
 
 const SKYBOX_FACES: [&str; 6] = [
     "./src/resources/textures/skybox/right.jpg",
@@ -77,16 +90,47 @@ const SKYBOX_FACES: [&str; 6] = [
 const WINDOW_TITLE: &str = "Tungus";
 const WINDOW_SIZE: (u32, u32) = (600, 600);
 
-fn main() {
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // System initialization
+const INSTANCES: usize = 1000;
+
+const INPUT_POLL_INTERVAL: Duration = Duration::from_micros(2000);
+
+fn init_shaders() -> HashMap<&'static str, ShaderProgram> {
+    let mut shader_map = HashMap::new();
+    shader_map.insert(
+        "model",
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, OBJECT_FRAG_SHADER).unwrap(),
+    );
+    shader_map.insert(
+        "debug",
+        ShaderProgram::from_vert_geo_frag(REGULAR_VERT_SHADER, DEBUG_GEO_SHADER, DEBUG_FRAG_SHADER)
+            .unwrap(),
+    );
+    shader_map.insert(
+        "outline",
+        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, BUFFER_FRAG_SHADER).unwrap(),
+    );
+    shader_map.insert(
+        "screen",
+        ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap(),
+    );
+    shader_map.insert(
+        "skybox",
+        ShaderProgram::from_vert_frag(SKYBOX_VERT_SHADER, SKYBOX_FRAG_SHADER).unwrap(),
+    );
+    shader_map
+}
+
+fn init_sdl() -> SDL {
     let sdl = SDL::init(InitFlags::Everything).expect("couldn't start SDL");
     sdl.gl_set_attribute(SdlGlAttr::MajorVersion, 3).unwrap();
     sdl.gl_set_attribute(SdlGlAttr::MinorVersion, 3).unwrap();
     sdl.gl_set_attribute(SdlGlAttr::Profile, GlProfile::Core)
         .unwrap();
     sdl.gl_set_attribute(SdlGlAttr::StencilSize, 8).unwrap();
+    sdl
+}
 
+fn init_glwindow(sdl: &SDL) -> GlWindow {
     let win = sdl
         .create_gl_window(
             WINDOW_TITLE,
@@ -102,31 +146,10 @@ fn main() {
         let fun = |x: *const u8| win.get_proc_address(x as *const i8) as *const std::ffi::c_void;
         load_global_gl(&fun);
     }
+    win
+}
 
-    let framebuffer = Framebuffer::new().unwrap();
-    framebuffer.setup_with_renderbuffer(WINDOW_SIZE);
-
-    let mirrored_framebuffer = Framebuffer::new().unwrap();
-    mirrored_framebuffer.setup_with_renderbuffer(WINDOW_SIZE);
-
-    unsafe {
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_STENCIL_TEST);
-        glEnable(GL_BLEND);
-        glEnable(GL_CULL_FACE);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-    }
-
-    let _ = sdl.set_relative_mouse_mode(true);
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Camera initialization
-    let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
-    let mut mirror_camera;
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Lighting initialization
+fn init_lighting(camera: &Camera) -> Lighting {
     let ambient = vec3(0.2, 0.2, 0.2);
     let diffuse = vec3(1.0, 1.0, 1.0);
     let specular = vec3(1.0, 1.0, 1.0);
@@ -142,8 +165,8 @@ fn main() {
     lamps[3].pos = vec3(0.0, -10.0, 0.0);
 
     let flashlight = Spotlight::new(
-        main_camera.get_pos(),
-        main_camera.get_dir(),
+        camera.get_pos(),
+        camera.get_dir(),
         ambient / 2.0,
         diffuse / 2.0,
         specular / 2.0,
@@ -152,32 +175,29 @@ fn main() {
         20.0_f32.to_radians(),
     );
 
-    let mut lighting = Lighting {
+    Lighting {
         dir: sun,
         point: Vec::from(lamps),
         spot: flashlight,
-    };
+    }
+}
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // UBO initialization
+fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
+    let mut objects_list: Vec<SceneObject> = vec![];
 
-    let matrices_ubo = UniformBuffer::new(0).unwrap();
-    matrices_ubo.allocate(240);
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Scene objects initialization
-    let mut objects_list: Vec<&SceneObject> = vec![];
-
-    // let backpack = Model::new(Path::new("./src/resources/models/backpack/backpack.obj"));
-
-    let mut cube_map = CubeMap::new(TextureType::Diffuse);
-    cube_map.load(SKYBOX_FACES);
-    cube_map.set_wrapping(GL_CLAMP_TO_EDGE);
-    cube_map.set_filters(GL_LINEAR, GL_LINEAR);
-    let skybox = Skybox::new(cube_map);
-    let sky_object = SceneObject::from(skybox);
-
-    let cube = Model::new(Path::new(ABSTRACT_CUBE));
+    let rock_model = Model::new(Path::new(ROCK_1));
+    let mut rock_object = SceneObject::from(rock_model);
+    rock_object.scale(&vec3(0.1, 0.1, 0.1));
+    rock_object.add_instances(INSTANCES);
+    for i in 0..INSTANCES {
+        RandomTransform::position(
+            rock_object.get_instance_mut(i as isize),
+            (-100.0, 100.0),
+            (-100.0, 100.0),
+            (-100.0, 100.0),
+        );
+    }
+    objects_list.push(rock_object);
 
     let mut box_mesh = BasicMesh::cube(1.0);
     let mut cont_tex = Texture2D::new(TextureType::Diffuse);
@@ -187,61 +207,180 @@ fn main() {
     cont_spec.load(&Path::new(CONTAINER_SPECULAR));
     cont_spec.set_wrapping(GL_CLAMP_TO_EDGE);
     box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 1.0);
-    let box_object = SceneObject::from(box_mesh);
-    objects_list.push(&box_object);
-
-    let mut cube_object = SceneObject::from(cube);
-    cube_object.scale(0.3);
-    cube_object.translate(&vec3(0.0, 1.0, 0.0));
-    objects_list.push(&cube_object);
+    let mut box_object = SceneObject::from(box_mesh);
+    box_object.set_outline(vec4(0.5, 0.2, 0.3, 1.0));
+    objects_list.push(box_object);
 
     let mut lamp_mesh = BasicMesh::cube(1.0);
     let mut lamp_texture = Texture2D::new(TextureType::Diffuse);
     lamp_texture.load(Path::new(LAMP_TEXTURE));
     lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 1.0);
-    let mut lamp_objects: Vec<SceneObject> = Vec::new();
-    for i in 0..lamps.len() {
-        let mut lamp_object = SceneObject::from(lamp_mesh.clone());
-        lamp_object.translate(&lamps[i].pos);
-        lamp_object.scale(0.1);
-        lamp_objects.push(lamp_object);
+    let mut lamp_object = SceneObject::from(lamp_mesh.clone());
+    lamp_object.get_instance_mut(0).translate(&lamps[0].pos);
+    lamp_object.get_instance_mut(0).scale(&vec3(0.1, 0.1, 0.1));
+    lamp_object.add_instances(lamps.len() - 1);
+    for i in 1..lamps.len() {
+        lamp_object
+            .get_instance_mut(i as isize)
+            .translate(&lamps[i].pos);
+        lamp_object
+            .get_instance_mut(i as isize)
+            .scale(&vec3(0.1, 0.1, 0.1));
     }
-    for i in 0..lamps.len() {
-        objects_list.push(&lamp_objects[i]);
+    objects_list.push(lamp_object);
+
+    objects_list
+}
+
+fn init_skybox() -> Skybox {
+    let mut cube_map = CubeMap::new(TextureType::Diffuse);
+    cube_map.load(SKYBOX_FACES);
+    cube_map.set_wrapping(GL_CLAMP_TO_EDGE);
+    cube_map.set_filters(GL_LINEAR, GL_LINEAR);
+    let skybox = Skybox::new(cube_map);
+    skybox
+}
+
+fn init_random_transforms(quantity: usize) -> Vec<RandomTransform> {
+    let mut rts = vec![];
+    for _ in 0..quantity {
+        let mut rng = rand::thread_rng();
+        rts.push(RandomTransform::continuous(
+            0.1,
+            0.1,
+            rng.gen_range(0..=1000),
+            rng.gen_range(0..=1000),
+        ));
+    }
+    rts
+}
+
+struct ControllerHub<'a> {
+    pub camera: Rc<RefCell<CameraController>>,
+    pub flashlight: Rc<RefCell<FlashlightController>>,
+    pub program: Rc<RefCell<ProgramController>>,
+    pub screen: Rc<RefCell<ScreenController>>,
+    pub scene: Rc<RefCell<SceneController>>,
+    pub rt: Rc<RefCell<RTController>>,
+    pub handler: Rc<RefCell<SignalHandler<'a>>>,
+}
+
+impl<'a> ControllerHub<'a> {
+    pub fn init(sdl: &'a SDL) -> Self {
+        let camera_controller = CameraController::new();
+        let flashlight_controller = FlashlightController::new();
+        let program_controller = ProgramController::new();
+        let screen_controller = ScreenController::new();
+        let scene_controller = SceneController::new();
+        let rt_controller = RTController::new();
+        let mut signal_handler = SignalHandler::new(&sdl);
+        signal_handler
+            .connect(unsafe { Weak::from_raw(Rc::downgrade(&camera_controller).into_raw()) });
+        signal_handler
+            .connect(unsafe { Weak::from_raw(Rc::downgrade(&flashlight_controller).into_raw()) });
+        signal_handler
+            .connect(unsafe { Weak::from_raw(Rc::downgrade(&program_controller).into_raw()) });
+        signal_handler
+            .connect(unsafe { Weak::from_raw(Rc::downgrade(&screen_controller).into_raw()) });
+        signal_handler
+            .connect(unsafe { Weak::from_raw(Rc::downgrade(&scene_controller).into_raw()) });
+        signal_handler.connect(unsafe { Weak::from_raw(Rc::downgrade(&rt_controller).into_raw()) });
+        ControllerHub {
+            camera: camera_controller,
+            flashlight: flashlight_controller,
+            program: program_controller,
+            screen: screen_controller,
+            scene: scene_controller,
+            rt: rt_controller,
+            handler: Rc::new(RefCell::new(signal_handler)),
+        }
     }
 
+    pub fn update(
+        &'a self,
+        cycle_time: f32,
+        camera: &mut Camera,
+        flashlight: &mut Spotlight,
+        prog: &mut Program,
+        screen: &mut Screen,
+        params: &mut SceneParameters,
+        rts: &mut Vec<RandomTransform>,
+    ) {
+        self.camera
+            .update_control_parameters(&mut |controller: &mut CameraController| {
+                controller.set_speeds(cycle_time);
+            });
+        (*self.handler).borrow_mut().wait_event();
+        self.camera.process_signals(camera);
+        self.flashlight.process_signals(flashlight);
+        self.program.process_signals(prog);
+        self.screen.process_signals(screen);
+        self.scene.process_signals(params);
+        self.rt.process_signals(rts);
+        // return new_keys_state;
+    }
+}
+
+struct App {
+    pub sdl: SDL,
+    pub win: GlWindow,
+}
+
+impl App {
+    pub fn init() -> Self {
+        let sdl = init_sdl();
+        let win = init_glwindow(&sdl);
+
+        unsafe {
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_STENCIL_TEST);
+            glEnable(GL_BLEND);
+            glEnable(GL_CULL_FACE);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+        }
+
+        let _ = sdl.set_relative_mouse_mode(true);
+
+        App { sdl, win }
+    }
+}
+
+fn main() {
+    // System initialization
+    let app = App::init();
+
+    let mut main_camera = Camera::new(vec3(0.0, 0.0, -2.0));
+
+    let mut lighting = init_lighting(&main_camera);
+
+    let matrices_ubo = UniformBuffer::new(0).unwrap();
+    matrices_ubo.allocate(240);
+
+    // Scene objects initialization
+    let skybox = init_skybox();
+    let mut objects_list: Vec<SceneObject> = init_obj_list(&lighting.point);
     let canvas = SceneObject::from(Canvas::new());
     let mirror = SceneObject::from(Canvas::new());
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Shader initialization
-    let shader_program_model =
-        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, OBJECT_FRAG_SHADER).unwrap();
-    let shader_program_debug =
-        ShaderProgram::from_vert_geo_frag(REGULAR_VERT_SHADER, DEBUG_GEO_SHADER, DEBUG_FRAG_SHADER)
-            .unwrap();
-    let shader_program_outline =
-        ShaderProgram::from_vert_frag(REGULAR_VERT_SHADER, BUFFER_FRAG_SHADER).unwrap();
-    let shader_program_screen =
-        ShaderProgram::from_vert_frag(SCREEN_VERT_SHADER, SCREEN_FRAG_SHADER).unwrap();
-    let shader_program_skybox =
-        ShaderProgram::from_vert_frag(SKYBOX_VERT_SHADER, SKYBOX_FRAG_SHADER).unwrap();
+    let shaders = init_shaders();
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////
+    let mut rts = init_random_transforms(INSTANCES);
+
     // Screen initialization
     let mut screen = Screen::new(
         canvas,
         vec4(0.1, 0.1, 0.1, 1.0),
-        framebuffer,
-        &shader_program_screen,
-        &matrices_ubo,
+        WINDOW_SIZE,
+        shaders["screen"],
+        matrices_ubo,
     );
-    let mirrored_screen = Screen::new(
+    let mut mirrored_screen = Screen::new(
         mirror,
         vec4(0.1, 0.1, 0.1, 1.0),
-        mirrored_framebuffer,
-        &shader_program_screen,
-        &matrices_ubo,
+        WINDOW_SIZE,
+        shaders["screen"],
+        matrices_ubo,
     );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -255,24 +394,13 @@ fn main() {
     println!("polygon_mode: {:?}", error);
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    // Control initialization
-    let camera_controller = CameraController::new();
-    let flashlight_controller = FlashlightController::new();
-    let program_controller = ProgramController::new();
-    let screen_controller = ScreenController::new();
-    let scene_controller = SceneController::new();
-    let mut signal_handler = SignalHandler::new(&sdl);
-    signal_handler.connect(camera_controller.clone());
-    signal_handler.connect(flashlight_controller.clone());
-    signal_handler.connect(program_controller.clone());
-    signal_handler.connect(screen_controller.clone());
-    signal_handler.connect(scene_controller.clone());
+    let control_hub = ControllerHub::init(&app.sdl);
+    (*control_hub.rt).borrow_mut().add_rts(&rts);
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////
     // Program loop
     let mut program_loop = Program {
         loop_active: true,
-        timer: &|| sdl.get_ticks(),
+        // timer: &|| app.sdl.get_ticks(),
     };
     let (mut elapsed_time, mut previous_time): (u32, u32);
 
@@ -281,58 +409,81 @@ fn main() {
 
     let mut scene_params = SceneParameters::init();
 
+    let mut total_update: Duration = Duration::new(0, 0);
+    let mut total_instances: Duration = Duration::new(0, 0);
+    let mut total_draw: Duration = Duration::new(0, 0);
+    let mut total_cycles: u32 = 0;
+
+    let mut last_update = Instant::now();
+
     while program_loop.loop_active {
+        let start_of_frame = Instant::now();
+        total_cycles += 1;
+
         previous_time = elapsed_time;
-        elapsed_time = sdl.get_ticks();
+        elapsed_time = app.sdl.get_ticks();
         cycle_time = (elapsed_time - previous_time) as f32;
 
-        camera_controller.update_control_parameters(&mut |controller: &mut CameraController| {
-            controller.set_speeds(cycle_time);
-        });
-        signal_handler.wait_event();
-        camera_controller.process_signals(&mut main_camera);
-        flashlight_controller.process_signals(&mut lighting.spot);
-        program_controller.process_signals(&mut program_loop);
-        screen_controller.process_signals(&mut screen);
-        scene_controller.process_signals(&mut scene_params);
+        let start_update = Instant::now();
+        if last_update.elapsed() >= INPUT_POLL_INTERVAL {
+            control_hub.update(
+                cycle_time,
+                &mut main_camera,
+                &mut lighting.spot,
+                &mut program_loop,
+                &mut screen,
+                &mut scene_params,
+                &mut rts,
+            );
+            last_update = Instant::now();
+        }
+        total_update += start_update.elapsed();
+
         lighting.spot.pos = main_camera.get_pos();
         lighting.spot.dir = main_camera.get_dir();
-        // let time_value: f32 = sdl.get_ticks() as f32 / 500.0;
-        // let pulse: f32 = (time_value.sin() / 4.0) + 0.75;
 
-        let scene = Scene {
-            objects: &objects_list,
-            skyboxes: &vec![&sky_object],
-            object_shader: &shader_program_model,
-            skybox_shader: &shader_program_skybox,
-            outline_shader: &shader_program_outline,
-            debug_shader: &shader_program_debug,
-            camera: &main_camera,
+        let start_instances = Instant::now();
+        for i in 0..INSTANCES {
+            let inst = objects_list[0].get_instance_mut(i.try_into().unwrap());
+            rts[i].rotate(inst);
+            rts[i].translate(inst);
+        }
+        total_instances += start_instances.elapsed();
+
+        let mut scene = Scene {
+            objects: objects_list.clone(),
+            skyboxes: &vec![&skybox],
+            object_shader: shaders["model"],
+            skybox_shader: shaders["skybox"],
+            outline_shader: shaders["outline"],
+            debug_shader: shaders["debug"],
+            camera: main_camera,
             lighting: &lighting,
-            params: &scene_params,
-        };
-        mirror_camera = main_camera.invert();
-        let mirrored_scene = Scene {
-            objects: &objects_list,
-            skyboxes: &vec![&sky_object],
-            object_shader: &shader_program_model,
-            skybox_shader: &shader_program_skybox,
-            outline_shader: &shader_program_outline,
-            debug_shader: &shader_program_debug,
-            camera: &mirror_camera,
-            lighting: &lighting,
-            params: &scene_params,
+            params: scene_params,
         };
 
-        shader_program_model.use_program();
-        shader_program_model.set_1f("time", sdl.get_ticks() as f32 / 500.0);
+        shaders["model"].use_program();
+        shaders["model"].set_1f("time", app.sdl.get_ticks() as f32 / 500.0);
 
-        screen.draw_on_framebuffer(&scene);
-        mirrored_screen.draw_on_framebuffer(&mirrored_scene);
+        let start_draw = Instant::now();
+        screen.draw_on_framebuffer(scene.borrow_mut());
+        let mut mirrored_scene = scene.mirrored();
+        mirrored_screen.draw_on_framebuffer(mirrored_scene.borrow_mut());
         mirrored_screen.draw_on_another(&screen, 0.3, vec2(0.5, 0.5));
         screen.draw_on_screen();
+        total_draw += start_draw.elapsed();
 
-        win.swap_window();
-        // println!("win.swap_window();");
+        app.win.swap_window();
+        let fps = Duration::from_secs(1).div_duration_f32(start_of_frame.elapsed());
+        let average_update = total_update / total_cycles;
+        let average_instances = total_instances / total_cycles;
+        let average_draw = total_draw / total_cycles;
+        let mut info: String =
+            String::from(std::format!("Control update time: {average_update:?}\n"));
+        info += &std::format!("Instance move time: {average_instances:?}\n");
+        info += &std::format!("Draw time: {average_draw:?}\n");
+        info += &std::format!("FPS: {fps}\n");
+        info += "----------------------------------------";
+        std::println!("{info}");
     }
 }

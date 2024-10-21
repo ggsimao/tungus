@@ -10,13 +10,14 @@ use std::path::Path;
 
 use crate::camera::Camera;
 use crate::data::UniformBuffer;
-use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
 use crate::textures::CubeMap;
 use crate::textures::{Material, Texture2D};
+use crate::utils;
 
+#[derive(Clone, Copy)]
 pub struct Shader(pub u32);
 
 impl Shader {
@@ -72,7 +73,7 @@ impl Shader {
     }
 
     pub fn from_source(ty: ShaderType, path: &Path) -> Result<Self, String> {
-        let source = helpers::read_from_file(path);
+        let source = utils::read_from_file(path);
         let obj = Self::new(ty).ok_or_else(|| "Couldn't allocate new shader".to_string())?;
         obj.set_source(&source[..]);
         obj.compile();
@@ -92,6 +93,7 @@ pub enum ShaderType {
     FragmentShader = GL_FRAGMENT_SHADER.0 as isize,
 }
 
+#[derive(Clone, Copy)]
 pub struct ShaderProgram(pub u32);
 impl ShaderProgram {
     pub fn new() -> Option<Self> {

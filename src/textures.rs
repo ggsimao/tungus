@@ -18,7 +18,7 @@ pub enum TextureType {
     Attachment,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Texture2D {
     id: u32,
     ttype: TextureType,

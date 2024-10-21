@@ -98,16 +98,12 @@ impl Spotlight {
 }
 
 pub struct FlashlightController {
-    pub signal_list: Vec<SignalType>,
     on: bool,
 }
 
 impl FlashlightController {
     pub fn new() -> Rc<RefCell<FlashlightController>> {
-        Rc::new(RefCell::new(Self {
-            signal_list: vec![],
-            on: false,
-        }))
+        Rc::new(RefCell::new(Self { on: false }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {
         match keycode {
@@ -117,9 +113,12 @@ impl FlashlightController {
     }
 }
 
-impl<'a> Slot<'a> for FlashlightController {
+impl<'a> Slot for FlashlightController {
     fn on_signal(&mut self, signal: SignalType) {
-        self.signal_list.push(signal);
+        match signal {
+            SignalType::KeyPressed(key) => self.on_key_pressed(key),
+            _ => (),
+        }
     }
 }
 
@@ -128,15 +127,8 @@ impl<'a> Controller<'a, Spotlight, FlashlightController> for Rc<RefCell<Flashlig
         update(&mut (**self).borrow_mut());
     }
     fn process_signals(&'a self, obj: &mut Spotlight) {
-        let mut self_obj = (**self).borrow_mut();
-        for signal in self_obj.signal_list.clone() {
-            match signal {
-                SignalType::KeyPressed(key) => self_obj.on_key_pressed(key),
-                _ => (),
-            }
-        }
+        let self_obj = (**self).borrow_mut();
         obj.on = self_obj.on;
-        self_obj.signal_list.clear();
     }
 }
 

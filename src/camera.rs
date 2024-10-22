@@ -1,4 +1,6 @@
-use std::{borrow::BorrowMut, cell::RefCell, f32::consts::PI, rc::Rc};
+use std::{
+    borrow::BorrowMut, cell::RefCell, collections::HashMap, f32::consts::PI, rc::Rc, time::Instant,
+};
 
 use beryllium::Keycode;
 use glfw::Key;
@@ -126,7 +128,6 @@ impl Camera {
 }
 
 pub struct CameraController {
-    pub signal_list: Vec<SignalType>,
     pub inv_vertical: bool,
     pub trans_speed: f32,
     pub rot_speed: f32,
@@ -141,7 +142,6 @@ pub struct CameraController {
 impl<'a> CameraController {
     pub fn new() -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(Self {
-            signal_list: vec![],
             inv_vertical: false,
             trans_speed: 0.1,
             rot_speed: 0.1,
@@ -190,9 +190,15 @@ impl<'a> CameraController {
     }
 }
 
-impl<'a> Slot<'a> for CameraController {
+impl<'a> Slot for CameraController {
     fn on_signal(&mut self, signal: SignalType) {
-        self.signal_list.push(signal);
+        match signal {
+            SignalType::KeyPressed(key) => self.on_key_pressed(key),
+            SignalType::KeyReleased(key) => self.on_key_released(key),
+            SignalType::MouseMoved(x, y) => self.on_mouse_moved(x, y),
+            SignalType::MouseScrolled(y) => self.on_mouse_scrolled(y),
+            _ => (),
+        }
     }
 }
 
@@ -202,15 +208,6 @@ impl<'a> Controller<'a, Camera, CameraController> for Rc<RefCell<CameraControlle
     }
     fn process_signals(&self, obj: &mut Camera) {
         let mut self_obj = (**self).borrow_mut();
-        for signal in self_obj.signal_list.clone() {
-            match signal {
-                SignalType::KeyPressed(key) => self_obj.on_key_pressed(key),
-                SignalType::KeyReleased(key) => self_obj.on_key_released(key),
-                SignalType::MouseMoved(x, y) => self_obj.on_mouse_moved(x, y),
-                SignalType::MouseScrolled(y) => self_obj.on_mouse_scrolled(y),
-                _ => (),
-            }
-        }
         let positive = self_obj.positive_delta_mov;
         let negative = self_obj.negative_delta_mov;
         let delta_mov = positive - negative;
@@ -221,7 +218,5 @@ impl<'a> Controller<'a, Camera, CameraController> for Rc<RefCell<CameraControlle
         obj.change_fov(self_obj.delta_zoom);
         self_obj.delta_rot *= 0.0;
         self_obj.delta_zoom = 0.0;
-
-        self_obj.signal_list.clear();
     }
 }

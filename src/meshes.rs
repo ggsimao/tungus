@@ -6,6 +6,7 @@ use gl33::global_loader::*;
 use nalgebra_glm::*;
 
 use crate::data::buffer_data;
+use crate::scene::Instance;
 use crate::shaders::Shader;
 use crate::shaders::ShaderProgram;
 use crate::textures::Material;
@@ -18,6 +19,8 @@ use crate::{
 pub trait Draw {
     fn draw(&self, shader: &ShaderProgram);
     fn clone_box(&self) -> Box<dyn Draw>;
+    fn instanced_draw(&self, shader: &ShaderProgram, instances: usize);
+    fn setup_inst_attr(&self);
 }
 
 impl Clone for Box<dyn Draw> {
@@ -26,7 +29,7 @@ impl Clone for Box<dyn Draw> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Copy)]
 #[repr(C)]
 pub struct Vertex {
     pub pos: Vec3,
@@ -59,15 +62,10 @@ impl Vertex {
     }
 }
 
-impl Clone for Vertex {
-    fn clone(&self) -> Self {
-        Vertex::from_vector(self.pos)
-    }
-}
-impl Copy for Vertex {}
 unsafe impl Zeroable for Vertex {}
 unsafe impl Pod for Vertex {}
 
+#[derive(Clone)]
 pub struct BasicMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
@@ -105,27 +103,22 @@ impl BasicMesh {
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, side / 2.0, side / 2.0),
-
             Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
-
             Vertex::new(side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, -side / 2.0),
-
             Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, side / 2.0),
             Vertex::new(side / 2.0, -side / 2.0, side / 2.0),
-
             Vertex::new(-side / 2.0, side / 2.0, -side / 2.0),
             Vertex::new(-side / 2.0, side / 2.0, side / 2.0),
             Vertex::new(-side / 2.0, -side / 2.0, -side / 2.0),
@@ -133,12 +126,8 @@ impl BasicMesh {
         ];
 
         let indices = vec![
-            0, 2, 1, 1, 2, 3, 
-            4, 5, 6, 6, 5, 7,
-            8, 10, 9, 9, 10, 11,
-            12, 14, 13, 13, 14, 15,
-            16, 18, 17, 17, 18, 19,
-            20, 22, 21, 21, 22, 23
+            0, 2, 1, 1, 2, 3, 4, 5, 6, 6, 5, 7, 8, 10, 9, 9, 10, 11, 12, 14, 13, 13, 14, 15, 16,
+            18, 17, 17, 18, 19, 20, 22, 21, 21, 22, 23,
         ];
         let mut normals = [Vec3::zeros(); 24];
 
@@ -260,10 +249,6 @@ impl BasicMesh {
             );
         }
     }
-
-    pub fn get_vao(&self) -> &VertexArray {
-        &self.vao
-    }
 }
 
 impl Draw for BasicMesh {
@@ -283,15 +268,51 @@ impl Draw for BasicMesh {
     fn clone_box(&self) -> Box<dyn Draw> {
         Box::new(self.clone())
     }
-}
-
-impl Clone for BasicMesh {
-    fn clone(&self) -> Self {
-        BasicMesh::new(
-            self.vertices.clone(),
-            self.indices.clone(),
-            self.material.clone(),
-        )
+    fn instanced_draw(&self, shader: &ShaderProgram, instances: usize) {
+        shader.set_material("material", &self.material);
+        self.vao.bind();
+        unsafe {
+            glDrawElementsInstanced(
+                GL_TRIANGLES,
+                self.indices.len() as i32,
+                GL_UNSIGNED_INT,
+                std::ptr::null(),
+                instances as i32,
+            );
+        }
+        VertexArray::clear_binding();
+    }
+    fn setup_inst_attr(&self) {
+        self.vao.bind();
+        unsafe {
+            for i in 0..4 {
+                glEnableVertexAttribArray(3 + i);
+                glVertexAttribPointer(
+                    3 + i,
+                    4,
+                    GL_FLOAT,
+                    GL_FALSE.0 as u8,
+                    core::mem::size_of::<Instance>().try_into().unwrap(),
+                    (i as usize * core::mem::size_of::<Vec4>()) as *const _,
+                );
+                glVertexAttribDivisor(3 + i, 1);
+            }
+            for i in 0..3 {
+                glEnableVertexAttribArray(7 + i);
+                glVertexAttribPointer(
+                    7 + i,
+                    3,
+                    GL_FLOAT,
+                    GL_FALSE.0 as u8,
+                    core::mem::size_of::<Instance>().try_into().unwrap(),
+                    (core::mem::offset_of!(Instance, normal)
+                        + i as usize * core::mem::size_of::<Vec3>())
+                        as *const _,
+                );
+                glVertexAttribDivisor(7 + i, 1);
+            }
+        }
+        VertexArray::clear_binding();
     }
 }
 
@@ -315,27 +336,22 @@ impl Skybox {
             Vertex::new(5.0, 5.0, -5.0),
             Vertex::new(-5.0, 5.0, 5.0),
             Vertex::new(5.0, 5.0, 5.0),
-
             Vertex::new(-5.0, -5.0, -5.0),
             Vertex::new(5.0, -5.0, -5.0),
             Vertex::new(-5.0, -5.0, 5.0),
             Vertex::new(5.0, -5.0, 5.0),
-
             Vertex::new(5.0, 5.0, -5.0),
             Vertex::new(-5.0, 5.0, -5.0),
             Vertex::new(5.0, -5.0, -5.0),
             Vertex::new(-5.0, -5.0, -5.0),
-
             Vertex::new(5.0, 5.0, 5.0),
             Vertex::new(5.0, 5.0, -5.0),
             Vertex::new(5.0, -5.0, 5.0),
             Vertex::new(5.0, -5.0, -5.0),
-
             Vertex::new(-5.0, 5.0, 5.0),
             Vertex::new(5.0, 5.0, 5.0),
             Vertex::new(-5.0, -5.0, 5.0),
             Vertex::new(5.0, -5.0, 5.0),
-
             Vertex::new(-5.0, 5.0, -5.0),
             Vertex::new(-5.0, 5.0, 5.0),
             Vertex::new(-5.0, -5.0, -5.0),
@@ -343,12 +359,8 @@ impl Skybox {
         ];
 
         let indices = [
-            0, 2, 1, 1, 2, 3, 
-            4, 5, 6, 6, 5, 7,
-            8, 10, 9, 9, 10, 11,
-            12, 14, 13, 13, 14, 15,
-            16, 18, 17, 17, 18, 19,
-            20, 22, 21, 21, 22, 23
+            0, 2, 1, 1, 2, 3, 4, 5, 6, 6, 5, 7, 8, 10, 9, 9, 10, 11, 12, 14, 13, 13, 14, 15, 16,
+            18, 17, 17, 18, 19, 20, 22, 21, 21, 22, 23,
         ];
 
         let skybox = Skybox {
@@ -361,10 +373,6 @@ impl Skybox {
         };
         skybox.setup_mesh();
         skybox
-    }
-
-    pub fn get_vao(&self) -> &VertexArray {
-        &self.vao
     }
 
     fn setup_mesh(&self) {
@@ -415,6 +423,10 @@ impl Draw for Skybox {
     fn clone_box(&self) -> Box<dyn Draw> {
         Box::new(self.clone())
     }
+    fn instanced_draw(&self, shader: &ShaderProgram, _: usize) {
+        self.draw(shader);
+    }
+    fn setup_inst_attr(&self) {}
 }
 
 impl Clone for Skybox {
@@ -449,7 +461,7 @@ impl Canvas {
         vertices[1].tex_coords = vec3(1.0, 1.0, 0.0);
         vertices[2].tex_coords = vec3(0.0, 0.0, 0.0);
         vertices[3].tex_coords = vec3(1.0, 0.0, 0.0);
-        
+
         let square = Canvas {
             vertices,
             indices,
@@ -516,4 +528,8 @@ impl Draw for Canvas {
     fn clone_box(&self) -> Box<dyn Draw> {
         Box::new(Canvas::new())
     }
+    fn instanced_draw(&self, shader: &ShaderProgram, _: usize) {
+        self.draw(shader);
+    }
+    fn setup_inst_attr(&self) {}
 }

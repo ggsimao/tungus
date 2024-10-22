@@ -14,6 +14,7 @@ glfw = "0.53.0"
 stb_image = "0.2.5"
 nalgebra-glm = "0.18.0"
 russimp = { version = "2.0.0"}
+rand = { version = "0.8.5" }
 
 [dev-dependencies]
 beryllium = "0.2.0-alpha.4"

@@ -78,17 +78,32 @@ vec4 calculateDirectionalLight(DirLight light, vec3 normal, vec3 viewDir) {
     vec4 final_specular = vec4(0.0);
 
     for (int i = 0; i < material.loadedDiffuse; i++) {
-        vec4 ambient = vec4(light . ambient, 1.0) * diff_tex_values[i];
-        vec4 diffuse = vec4(light . diffuse, 1.0) * diff * diff_tex_values[i];
-        final_ambient = mix(final_ambient, ambient, 0.5);
-        final_diffuse = mix(final_diffuse, diffuse, 0.5);
+        vec4 diff_tex = diff_tex_values[i];
+        vec4 ambient = vec4(light . ambient, 1.0) * diff_tex;
+        final_ambient.rgb += ambient.rgb;
+        final_ambient.a = max(final_ambient.a, ambient.a);
+
+        vec4 diffuse = vec4(light . diffuse, 1.0) * diff * diff_tex;
+        diffuse.a = min(diffuse.a, 1.0);
+        final_diffuse.rgb += diffuse.rgb;
+        final_diffuse.a = max(final_diffuse.a, diffuse.a);
     }
     for (int i = 0; i < material.loadedSpecular; i++) {
-        vec4 specular = vec4(light . specular, 1.0) * spec * spec_tex_values[i];
-        final_specular = mix(final_specular, specular, 0.5);
+        vec4 spec_tex = spec_tex_values[i];
+        vec4 specular = vec4(light . specular, 1.0) * spec * spec_tex;
+        specular.a = min(specular.a, 1.0);
+        final_specular.rgb += specular.rgb;
+        final_specular.a = max(final_specular.a, specular.a);
     }
+    final_ambient.rgb /= material.loadedDiffuse;
+    final_diffuse.rgb /= material.loadedDiffuse;
+    final_specular.rgb /= material.loadedSpecular;
 
-    return ( final_ambient + final_diffuse + final_specular );
+    vec4 final_directional;
+    final_directional.rgb = final_ambient.rgb + final_diffuse.rgb + final_specular.rgb;
+    final_directional.a = max(final_ambient.a, max(final_diffuse.a, final_specular.a));
+
+    return final_directional;
 }
 
 vec4 calculatePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
@@ -105,17 +120,32 @@ vec4 calculatePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewD
     vec4 final_specular = vec4(0.0);
 
     for (int i = 0; i < material.loadedDiffuse; i++) {
-        vec4 ambient = vec4(light . ambient, 1.0) * diff_tex_values[i];
-        vec4 diffuse = vec4(light . diffuse, 1.0) * diff * diff_tex_values[i];
-        final_ambient = mix(final_ambient, ambient, 0.5);
-        final_diffuse = mix(final_diffuse, diffuse, 0.5);
+        vec4 diff_tex = diff_tex_values[i];
+        vec4 ambient = vec4(light . ambient, 1.0) * diff_tex;
+        final_ambient.rgb += ambient.rgb;
+        final_ambient.a = max(final_ambient.a, ambient.a);
+
+        vec4 diffuse = vec4(light . diffuse, 1.0) * diff * diff_tex;
+        diffuse.a = min(diffuse.a, 1.0);
+        final_diffuse.rgb += diffuse.rgb;
+        final_diffuse.a = max(final_diffuse.a, diffuse.a);
     }
     for (int i = 0; i < material.loadedSpecular; i++) {
-        vec4 specular = vec4(light . specular, 1.0) * spec * spec_tex_values[i];
-        final_specular = mix(final_specular, specular, 0.5);
+        vec4 spec_tex = spec_tex_values[i];
+        vec4 specular = vec4(light . specular, 1.0) * spec * spec_tex;
+        specular.a = min(specular.a, 1.0);
+        final_specular.rgb += specular.rgb;
+        final_specular.a = max(final_specular.a, specular.a);
     }
+    final_ambient.rgb /= material.loadedDiffuse;
+    final_diffuse.rgb /= material.loadedDiffuse;
+    final_specular.rgb /= material.loadedSpecular;
 
-    return ( final_ambient + final_diffuse + final_specular );
+    vec4 final_pointlight;
+    final_pointlight.rgb = final_ambient.rgb + final_diffuse.rgb + final_specular.rgb;
+    final_pointlight.a = max(final_ambient.a, max(final_diffuse.a, final_specular.a));
+
+    return final_pointlight;
 }
 
 vec4 calculateSpotlight(Spotlight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
@@ -133,20 +163,32 @@ vec4 calculateSpotlight(Spotlight light, vec3 normal, vec3 fragPos, vec3 viewDir
     vec4 final_specular = vec4(0.0);
 
     for (int i = 0; i < material.loadedDiffuse; i++) {
-        vec4 ambient = vec4(light . ambient, 1.0) * diff_tex_values[i];
-        vec4 diffuse = vec4(light . diffuse, 1.0) * diff * diff_tex_values[i];
-        ambient *= intensity;
-        diffuse *= intensity;
-        final_ambient = mix(final_ambient, ambient, 0.5);
-        final_diffuse = mix(final_diffuse, diffuse, 0.5);
+        vec4 diff_tex = diff_tex_values[i];
+        vec4 ambient = vec4(light.ambient * intensity, 1.0) * diff_tex;
+        final_ambient.rgb += ambient.rgb;
+        final_ambient.a = max(final_ambient.a, ambient.a);
+
+        vec4 diffuse = vec4(light.diffuse * intensity, 1.0) * diff * diff_tex;
+        diffuse.a = min(diffuse.a, 1.0);
+        final_diffuse.rgb += diffuse.rgb;
+        final_diffuse.a = max(final_diffuse.a, diffuse.a);
     }
     for (int i = 0; i < material.loadedSpecular; i++) {
-        vec4 specular = vec4(light . specular, 1.0) * spec * spec_tex_values[i];
-        specular *= intensity;
-        final_specular = mix(final_specular, specular, 0.5);
+        vec4 spec_tex = spec_tex_values[i];
+        vec4 specular = vec4(light.specular * intensity, 1.0) * spec * spec_tex_values[i];
+        specular.a = min(specular.a, 1.0);
+        final_specular.rgb += specular.rgb;
+        final_specular.a = max(final_specular.a, specular.a);
     }
+    final_ambient.rgb /= material.loadedDiffuse;
+    final_diffuse.rgb /= material.loadedDiffuse;
+    final_specular.rgb /= material.loadedSpecular;
 
-    return ( final_ambient + final_diffuse + final_specular );
+    vec4 final_spotlight;
+    final_spotlight.rgb = final_ambient.rgb + final_diffuse.rgb + final_specular.rgb;
+    final_spotlight.a = max(final_ambient.a, max(final_diffuse.a, final_specular.a));
+
+    return final_spotlight;
 }
 
 void main() {
@@ -161,12 +203,17 @@ void main() {
 
     vec4 result = calculateDirectionalLight(dirLight, norm, viewDir);
 
-    for (int i = 0; i < NR_POINT_LIGHTS; i++)
-        result += calculatePointLight(pointLights[i], norm, fs_in.pos, viewDir);
+    for (int i = 0; i < NR_POINT_LIGHTS; i++) {
+        vec4 point_light_value = calculatePointLight(pointLights[i], norm, fs_in.pos, viewDir);
+        result.rgb += point_light_value.rgb;
+        result.a = max(result.a, point_light_value.a);
+    }
 
-    result += calculateSpotlight(spotlight, norm, fs_in.pos, viewDir);
+    vec4 spotlight_value = calculateSpotlight(spotlight, norm, fs_in.pos, viewDir);
+    result.rgb += spotlight_value.rgb;
+    result.a = max(result.a, spotlight_value.a);
 
-    if (result . a < 0.1) {
+    if (result.a < 0.1) {
         discard;
     } else {
         fragColor = result;

@@ -14,6 +14,7 @@ use crate::textures::{Texture2D, TextureType};
 
 // I really don't like the way this file is right now.
 
+#[derive(Clone, Copy)]
 pub struct VertexArray(pub u32);
 impl VertexArray {
     pub fn new() -> Option<Self> {
@@ -41,6 +42,7 @@ pub enum BufferType {
     ElementArray = GL_ELEMENT_ARRAY_BUFFER.0 as isize,
 }
 
+#[derive(Clone, Copy)]
 pub struct Buffer(pub u32);
 impl Buffer {
     pub fn new() -> Option<Self> {
@@ -224,7 +226,7 @@ impl Drop for Framebuffer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Renderbuffer {
     id: u32,
 }
@@ -266,6 +268,7 @@ impl Renderbuffer {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct UniformBuffer {
     id: u32,
     binding: u32,

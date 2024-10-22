@@ -180,4 +180,14 @@ impl Draw for Model {
     fn clone_box(&self) -> Box<dyn Draw> {
         Box::new(self.clone())
     }
+    fn instanced_draw(&self, shader: &ShaderProgram, instances: usize) {
+        for mesh in &self.meshes {
+            mesh.instanced_draw(shader, instances);
+        }
+    }
+    fn setup_inst_attr(&self) {
+        for mesh in &self.meshes {
+            mesh.setup_inst_attr();
+        }
+    }
 }

@@ -20,12 +20,24 @@ out VERTEX {
 
 out vec3 geo_normal;
 
+mat3 extractRotation(mat4 modelMatrix) {
+    // Extract the upper-left 3x3 part of the model matrix
+    mat3 rotationMatrix = mat3(modelMatrix);
+    
+    // Normalize each row to remove scaling (if needed)
+    rotationMatrix[0] = normalize(rotationMatrix[0]);
+    rotationMatrix[1] = normalize(rotationMatrix[1]);
+    rotationMatrix[2] = normalize(rotationMatrix[2]);
+
+    return rotationMatrix;
+}
+
 void main() {
     gl_Position = vec4(aPos, 1.0);
     vec4 out_pos_4 = modelMat * aInstModel * gl_Position;
     gl_Position = projMat * viewMat * out_pos_4;
     vs_out.pos = vec3(out_pos_4);
     vs_out.normal = normalMat * aInstNormal * aNormal;
-    geo_normal = aNormal;
+    geo_normal = extractRotation(modelMat) * extractRotation(aInstModel) * aNormal;
     vs_out.texCoords = aTexCoord;
 }

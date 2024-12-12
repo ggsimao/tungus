@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 
 use crate::controls::{Controller, SignalType, Slot};
@@ -21,6 +22,7 @@ pub struct Screen {
     shader: ShaderProgram,
     filter: bool,
     ubo: UniformBuffer,
+    window_size: (u32, u32),
 }
 
 impl<'a> Screen {
@@ -40,6 +42,7 @@ impl<'a> Screen {
             shader,
             filter: false,
             ubo,
+            window_size,
         }
     }
     pub fn clear_color(&self) {
@@ -68,6 +71,7 @@ impl<'a> Screen {
             glEnable(GL_DEPTH_TEST);
         }
         scene.compose(&self.ubo);
+        Framebuffer::clear_binding();
     }
 
     pub fn bind(&self) {
@@ -88,14 +92,15 @@ impl<'a> Screen {
 
         self.shader.use_program();
         self.shader
-            .set_texture2D("screenTexture", self.fbo.get_texture());
+            .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.ubo.set_model_mat(&transformed_canvas.get_model());
         self.ubo.set_normal_mat(&transformed_canvas.get_normal());
         transformed_canvas.draw(&self.shader);
     }
 
     pub fn draw_on_screen(&self) {
-        Framebuffer::clear_binding();
+        self.fbo.blit(self.window_size);
+        // Framebuffer::clear_binding();
         self.ubo.bind_base();
 
         unsafe {
@@ -106,7 +111,9 @@ impl<'a> Screen {
 
         self.shader.use_program();
         self.shader
-            .set_texture2D("screenTexture", self.fbo.get_texture());
+            .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
+        self.shader
+            .set_1i("sampleCount", self.fbo.get_texture().get_samples() as i32);
         self.shader.set_1b("applyFilter", self.filter);
         self.ubo.set_model_mat(&identity());
         self.ubo.set_normal_mat(&identity());

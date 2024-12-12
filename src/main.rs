@@ -15,6 +15,7 @@ use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
+use glfw::ffi::glfwWindowHint;
 use nalgebra_glm::*;
 use rand::Rng;
 use russimp::light::Light;
@@ -45,6 +46,7 @@ use textures::{CubeMap, Material, Texture2D, TextureType};
 pub mod camera;
 pub mod controls;
 pub mod data;
+pub mod helpers;
 pub mod lighting;
 pub mod meshes;
 pub mod models;
@@ -332,6 +334,8 @@ impl App {
         let win = init_glwindow(&sdl);
 
         unsafe {
+            glfwWindowHint(GL_SAMPLES.0 as i32, 4);
+            glEnable(GL_MULTISAMPLE);
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_STENCIL_TEST);
             glEnable(GL_BLEND);
@@ -341,6 +345,8 @@ impl App {
         }
 
         let _ = sdl.set_relative_mouse_mode(true);
+        let _ = sdl.gl_set_attribute(SdlGlAttr::MultisampleBuffers, 1);
+        let _ = sdl.gl_set_attribute(SdlGlAttr::MultisampleSamples, 4);
 
         App { sdl, win }
     }

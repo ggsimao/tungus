@@ -10,10 +10,12 @@ use std::path::Path;
 
 use crate::camera::Camera;
 use crate::data::UniformBuffer;
+use crate::helpers;
 use crate::lighting::DirectionalLight;
 use crate::lighting::PointLight;
 use crate::lighting::Spotlight;
 use crate::textures::CubeMap;
+use crate::textures::Texture2DMultisample;
 use crate::textures::{Material, Texture2D};
 use crate::utils;
 
@@ -73,7 +75,7 @@ impl Shader {
     }
 
     pub fn from_source(ty: ShaderType, path: &Path) -> Result<Self, String> {
-        let source = utils::read_from_file(path);
+        let source = helpers::read_from_file(path);
         let obj = Self::new(ty).ok_or_else(|| "Couldn't allocate new shader".to_string())?;
         obj.set_source(&source[..]);
         obj.compile();
@@ -227,6 +229,17 @@ impl ShaderProgram {
     }
     #[allow(non_snake_case)]
     pub fn set_texture2D(&self, texture_name: &str, value: &Texture2D) {
+        unsafe {
+            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        }
+        value.bind();
+        self.set_1i(texture_name, 0 as i32);
+        // unsafe {
+        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+        // }
+    }
+    #[allow(non_snake_case)]
+    pub fn set_texture2D_multisample(&self, texture_name: &str, value: &Texture2DMultisample) {
         unsafe {
             glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
         }

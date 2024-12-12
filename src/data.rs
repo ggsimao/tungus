@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+use std::path::Path;
 use std::ptr::null;
 
 use beryllium::GlWindow;
@@ -10,7 +12,9 @@ use gl33::global_loader::*;
 use nalgebra_glm::*;
 
 use crate::meshes::Vertex;
-use crate::textures::{Texture2D, TextureType};
+use crate::textures::{Texture2D, Texture2DMultisample, TextureType};
+
+const SAMPLES: u32 = 4;
 
 // I really don't like the way this file is right now.
 
@@ -91,14 +95,14 @@ pub fn polygon_mode(mode: PolygonMode) {
 #[derive(Debug)]
 pub struct Framebuffer {
     id: u32,
-    texture: Texture2D,
+    texture: Texture2DMultisample,
     rbo: Renderbuffer,
 }
 
 impl Framebuffer {
     pub fn new() -> Option<Self> {
         let mut fbo = 0;
-        let texture = Texture2D::new(TextureType::Attachment);
+        let texture = Texture2DMultisample::new(SAMPLES);
         let rbo = Renderbuffer::new().unwrap();
         unsafe {
             glGenFramebuffers(1, &mut fbo);
@@ -133,28 +137,13 @@ impl Framebuffer {
     // call glViewport again (before rendering to your framebuffer) with the new dimensions
     // of your texture, otherwise render commands will only fill part of the texture.
     pub fn attach_texture(&self, window_size: (u32, u32)) {
-        self.texture.bind();
-        unsafe {
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_RGB.0 as i32,
-                window_size.0 as i32,
-                window_size.1 as i32,
-                0,
-                GL_RGB,
-                GL_UNSIGNED_BYTE,
-                null(),
-            );
-        }
-        self.texture.set_filters(GL_LINEAR, GL_LINEAR);
-        Texture2D::clear_binding();
+        self.texture.create_texture(window_size);
 
         unsafe {
             glFramebufferTexture2D(
                 GL_FRAMEBUFFER,
                 GL_COLOR_ATTACHMENT0,
-                GL_TEXTURE_2D,
+                GL_TEXTURE_2D_MULTISAMPLE,
                 self.texture.get_id(),
                 0,
             );
@@ -190,7 +179,10 @@ impl Framebuffer {
 
     pub fn attach_renderbuffer(&self, window_size: (u32, u32)) {
         self.rbo.bind();
-        Renderbuffer::create_depth_stencil_storage(window_size);
+        Renderbuffer::create_depth_stencil_storage_multisample(
+            window_size,
+            self.texture.get_samples(),
+        );
         Renderbuffer::clear_binding();
         unsafe {
             glFramebufferRenderbuffer(
@@ -205,6 +197,25 @@ impl Framebuffer {
         }
     }
 
+    pub fn blit(&self, window_size: (u32, u32)) {
+        unsafe {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, self.id);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBlitFramebuffer(
+                0,
+                0,
+                window_size.0 as i32,
+                window_size.1 as i32,
+                0,
+                0,
+                window_size.0 as i32,
+                window_size.1 as i32,
+                GL_COLOR_BUFFER_BIT,
+                GL_LINEAR,
+            );
+        }
+    }
+
     pub fn bind(&self) {
         unsafe { glBindFramebuffer(GL_FRAMEBUFFER, self.id) }
     }
@@ -213,8 +224,34 @@ impl Framebuffer {
         unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) }
     }
 
-    pub fn get_texture(&self) -> &Texture2D {
+    pub fn get_texture(&self) -> &Texture2DMultisample {
         &self.texture
+    }
+
+    pub fn write_to_file(&self, path: &Path, size: (u32, u32)) {
+        self.bind();
+        self.blit(size);
+        Self::clear_binding();
+        let mut pixels = vec![0u8; (size.0 * size.1 * 3) as usize]; // 3 bytes per pixel for RGB
+
+        unsafe {
+            glReadPixels(
+                0,
+                0,
+                size.0 as i32,
+                size.1 as i32,
+                GL_RGB,
+                GL_UNSIGNED_BYTE,
+                pixels.as_mut_ptr() as *mut c_void,
+            );
+        }
+
+        use image::{ImageBuffer, Rgb};
+
+        let img = ImageBuffer::<Rgb<u8>, _>::from_raw(size.0, size.1, pixels)
+            .expect("Failed to create ImageBuffer from raw data");
+
+        img.save(path).expect("Failed to save image");
     }
 }
 
@@ -260,6 +297,18 @@ impl Renderbuffer {
         unsafe {
             glRenderbufferStorage(
                 GL_RENDERBUFFER,
+                GL_DEPTH24_STENCIL8,
+                window_size.0 as i32,
+                window_size.1 as i32,
+            );
+        }
+    }
+
+    pub fn create_depth_stencil_storage_multisample(window_size: (u32, u32), samples: u32) {
+        unsafe {
+            glRenderbufferStorageMultisample(
+                GL_RENDERBUFFER,
+                samples as i32,
                 GL_DEPTH24_STENCIL8,
                 window_size.0 as i32,
                 window_size.1 as i32,

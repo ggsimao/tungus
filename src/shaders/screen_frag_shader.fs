@@ -5,7 +5,7 @@ out vec4 fragColor;
 
 uniform sampler2DMS screenTexture;
 uniform int sampleCount;
-uniform bool applyFilter;
+uniform bool applySobel, applyMSAA;
 
 const float offset = 1.0 / 600.0;
 
@@ -16,17 +16,33 @@ const float kernel[3][3] = float[][](
 
 void main() {
     fragColor = vec4(0);
-    if (applyFilter) {
+    if (applySobel && applyMSAA) {
         for (int s = 0; s < sampleCount; s++) {
+            vec4 sampleColor = vec4(0);
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
-                    fragColor += texelFetch(screenTexture, ivec2((texCoords.st + vec2(i-1, j-1) * offset) * textureSize(screenTexture)), s) * kernel[i][j];
+                    ivec2 texelCoords = ivec2((texCoords + ivec2(i - 1, j - 1) * offset) * textureSize(screenTexture));
+                    sampleColor += texelFetch(screenTexture, texelCoords, s) * kernel[i][j];
                 }
             }
+            fragColor += sampleColor / sampleCount;
+        }
+
+    } else if (applySobel && !applyMSAA) {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                ivec2 texelCoords = ivec2((texCoords + ivec2(i - 1, j - 1) * offset) * textureSize(screenTexture));
+                fragColor += texelFetch(screenTexture, texelCoords, 0) * kernel[i][j];
+            }
+        }
+    } else if (applyMSAA) {
+        for (int s = 0; s < sampleCount; s++) {
+            ivec2 texelCoords = ivec2(texCoords * textureSize(screenTexture));
+            vec4 sampleColor = texelFetch(screenTexture, texelCoords, s);
+            fragColor += sampleColor / sampleCount;
         }
     } else {
-        for (int s = 0; s < sampleCount; s++) {
-            fragColor = texelFetch(screenTexture, ivec2(texCoords.st * textureSize(screenTexture)), s);
-        }
+        ivec2 texelCoords = ivec2(texCoords * textureSize(screenTexture));
+        fragColor = texelFetch(screenTexture, texelCoords, 0);
     }
 }

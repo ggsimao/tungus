@@ -14,7 +14,7 @@ use nalgebra_glm::*;
 use crate::meshes::Vertex;
 use crate::textures::{Texture2D, Texture2DMultisample, TextureType};
 
-const SAMPLES: u32 = 4;
+const SAMPLES: u32 = 16;
 
 // I really don't like the way this file is right now.
 

@@ -85,7 +85,6 @@ impl Texture2D {
                 GL_UNSIGNED_BYTE,
                 EMPTY_DATA.as_ptr() as *const c_void,
             );
-            glGenerateMipmap(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
@@ -109,7 +108,6 @@ impl Texture2D {
                 GL_UNSIGNED_BYTE,
                 data.as_ptr() as *const c_void,
             );
-            glGenerateMipmap(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     }

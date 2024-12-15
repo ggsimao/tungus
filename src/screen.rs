@@ -20,7 +20,8 @@ pub struct Screen {
     clear_color: Vec4,
     fbo: Framebuffer,
     shader: ShaderProgram,
-    filter: bool,
+    sobel_on: bool,
+    msaa_on: bool,
     ubo: UniformBuffer,
     window_size: (u32, u32),
 }
@@ -40,7 +41,8 @@ impl<'a> Screen {
             clear_color,
             fbo,
             shader,
-            filter: false,
+            sobel_on: false,
+            msaa_on: false,
             ubo,
             window_size,
         }
@@ -99,8 +101,7 @@ impl<'a> Screen {
     }
 
     pub fn draw_on_screen(&self) {
-        self.fbo.blit(self.window_size);
-        // Framebuffer::clear_binding();
+        Framebuffer::clear_binding();
         self.ubo.bind_base();
 
         unsafe {
@@ -114,7 +115,8 @@ impl<'a> Screen {
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.shader
             .set_1i("sampleCount", self.fbo.get_texture().get_samples() as i32);
-        self.shader.set_1b("applyFilter", self.filter);
+        self.shader.set_1b("applySobel", self.sobel_on);
+        self.shader.set_1b("applyMSAA", self.msaa_on);
         self.ubo.set_model_mat(&identity());
         self.ubo.set_normal_mat(&identity());
         self.canvas.draw(&self.shader);
@@ -122,16 +124,21 @@ impl<'a> Screen {
 }
 
 pub struct ScreenController {
-    filter: bool,
+    sobel_on: bool,
+    msaa_on: bool,
 }
 
 impl ScreenController {
     pub fn new() -> Rc<RefCell<ScreenController>> {
-        Rc::new(RefCell::new(Self { filter: false }))
+        Rc::new(RefCell::new(Self {
+            sobel_on: false,
+            msaa_on: true,
+        }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {
         match keycode {
-            Keycode::E => self.filter = !self.filter,
+            Keycode::E => self.sobel_on = !self.sobel_on,
+            Keycode::M => self.msaa_on = !self.msaa_on,
             _ => (),
         }
     }
@@ -152,6 +159,7 @@ impl<'a> Controller<'a, Screen, ScreenController> for Rc<RefCell<ScreenControlle
     }
     fn process_signals(&'a self, obj: &mut Screen) {
         let self_obj = (**self).borrow();
-        obj.filter = self_obj.filter;
+        obj.sobel_on = self_obj.sobel_on;
+        obj.msaa_on = self_obj.msaa_on;
     }
 }

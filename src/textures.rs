@@ -85,7 +85,6 @@ impl Texture2D {
                 GL_UNSIGNED_BYTE,
                 EMPTY_DATA.as_ptr() as *const c_void,
             );
-            glGenerateMipmap(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
@@ -109,7 +108,6 @@ impl Texture2D {
                 GL_UNSIGNED_BYTE,
                 data.as_ptr() as *const c_void,
             );
-            glGenerateMipmap(GL_TEXTURE_2D);
             glBindTexture(GL_TEXTURE_2D, 0);
         }
     }
@@ -283,5 +281,57 @@ impl Material {
 
     pub fn get_shininess(&self) -> f32 {
         self.shininess
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Texture2DMultisample {
+    id: u32,
+    samples: u32,
+}
+
+impl Texture2DMultisample {
+    pub fn new(samples: u32) -> Self {
+        let mut texture: u32 = 0;
+        unsafe {
+            glGenTextures(1, &mut texture);
+        }
+        Self {
+            id: texture,
+            samples,
+        }
+    }
+    pub fn create_texture(&self, size: (u32, u32)) {
+        self.bind();
+        unsafe {
+            glTexImage2DMultisample(
+                GL_TEXTURE_2D_MULTISAMPLE,
+                self.samples as i32,
+                GL_RGB,
+                size.0 as i32,
+                size.1 as i32,
+                GL_TRUE.0 as u8,
+            );
+        }
+        Self::clear_binding();
+    }
+
+    pub fn bind(&self) {
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, self.id);
+        }
+    }
+
+    pub fn clear_binding() {
+        unsafe {
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+        }
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+    pub fn get_samples(&self) -> u32 {
+        self.samples
     }
 }

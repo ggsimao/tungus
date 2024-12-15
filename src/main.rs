@@ -45,6 +45,7 @@ use textures::{CubeMap, Material, Texture2D, TextureType};
 pub mod camera;
 pub mod controls;
 pub mod data;
+pub mod helpers;
 pub mod lighting;
 pub mod meshes;
 pub mod models;
@@ -332,6 +333,7 @@ impl App {
         let win = init_glwindow(&sdl);
 
         unsafe {
+            glEnable(GL_MULTISAMPLE);
             glEnable(GL_DEPTH_TEST);
             glEnable(GL_STENCIL_TEST);
             glEnable(GL_BLEND);

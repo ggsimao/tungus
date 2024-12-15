@@ -1,6 +1,5 @@
 use beryllium::Keycode;
 use rand::Rng;
-use std::path::Path;
 use std::rc::Rc;
 use std::{cell::RefCell, fs};
 
@@ -11,10 +10,6 @@ use crate::{
     scene::{Instance, SceneObject},
     spatial::Spatial,
 };
-
-pub fn read_from_file(path: &Path) -> String {
-    fs::read_to_string(path).expect(&format!("Unable to read file {}", path.display())[..])
-}
 
 pub struct RandomTransform {
     axis: Vec3,

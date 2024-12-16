@@ -320,7 +320,6 @@ impl<'a> Scene<'a> {
         let object_list: &mut Vec<SceneObject> = self.objects.borrow_mut();
         for object in object_list.iter_mut() {
             ubo.set_model_mat(&object.get_model());
-            ubo.set_normal_mat(&object.get_normal());
             object.draw(&self.object_shader);
             if self.params.visualize_normals {
                 self.debug_shader.use_program();

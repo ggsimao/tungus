@@ -365,28 +365,36 @@ impl UniformBuffer {
     pub fn set_model_mat(&self, model: &Mat4) {
         self.bind();
         unsafe {
-            glBufferSubData(GL_UNIFORM_BUFFER, 0, 64, model.as_ptr().cast());
+            glBufferSubData(
+                GL_UNIFORM_BUFFER,
+                0,
+                core::mem::size_of::<Mat4>().try_into().unwrap(),
+                model.as_ptr().cast(),
+            );
         }
         Self::clear_binding();
     }
     pub fn set_view_mat(&self, view: &Mat4) {
         self.bind();
         unsafe {
-            glBufferSubData(GL_UNIFORM_BUFFER, 64, 64, view.as_ptr().cast());
+            glBufferSubData(
+                GL_UNIFORM_BUFFER,
+                64,
+                core::mem::size_of::<Mat4>().try_into().unwrap(),
+                view.as_ptr().cast(),
+            );
         }
         Self::clear_binding();
     }
     pub fn set_projection_mat(&self, proj: &Mat4) {
         self.bind();
         unsafe {
-            glBufferSubData(GL_UNIFORM_BUFFER, 128, 64, proj.as_ptr().cast());
-        }
-        Self::clear_binding();
-    }
-    pub fn set_normal_mat(&self, normal: &Mat3) {
-        self.bind();
-        unsafe {
-            glBufferSubData(GL_UNIFORM_BUFFER, 192, 48, normal.as_ptr().cast());
+            glBufferSubData(
+                GL_UNIFORM_BUFFER,
+                128,
+                core::mem::size_of::<Mat4>().try_into().unwrap(),
+                proj.as_ptr().cast(),
+            );
         }
         Self::clear_binding();
     }

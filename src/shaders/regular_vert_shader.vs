@@ -9,7 +9,6 @@ layout (std140, binding = 0) uniform Matrices {
     mat4 modelMat;
     mat4 viewMat;
     mat4 projMat;
-    mat3 normalMat;
 };
 
 out VERTEX {
@@ -37,7 +36,10 @@ void main() {
     vec4 out_pos_4 = modelMat * aInstModel * gl_Position;
     gl_Position = projMat * viewMat * out_pos_4;
     vs_out.pos = vec3(out_pos_4);
-    vs_out.normal = normalMat * aInstNormal * aNormal;
+
+    mat3 normal_mat = transpose(inverse(mat3(viewMat * modelMat)));
+    vs_out.normal = normal_mat * aInstNormal * aNormal;
     geo_normal = extractRotation(modelMat) * extractRotation(aInstModel) * aNormal;
+    
     vs_out.texCoords = aTexCoord;
 }

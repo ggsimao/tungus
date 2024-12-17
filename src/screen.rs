@@ -96,7 +96,6 @@ impl<'a> Screen {
         self.shader
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.ubo.set_model_mat(&transformed_canvas.get_model());
-        self.ubo.set_normal_mat(&transformed_canvas.get_normal());
         transformed_canvas.draw(&self.shader);
     }
 
@@ -118,7 +117,6 @@ impl<'a> Screen {
         self.shader.set_1b("applySobel", self.sobel_on);
         self.shader.set_1b("applyMSAA", self.msaa_on);
         self.ubo.set_model_mat(&identity());
-        self.ubo.set_normal_mat(&identity());
         self.canvas.draw(&self.shader);
     }
 }

@@ -207,7 +207,7 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
     let mut cont_spec = Texture2D::new(TextureType::Specular);
     cont_spec.load(&Path::new(CONTAINER_SPECULAR));
     cont_spec.set_wrapping(GL_CLAMP_TO_EDGE);
-    box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 1.0);
+    box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 32.0);
     let mut box_object = SceneObject::from(box_mesh);
     box_object.set_outline(vec4(0.5, 0.2, 0.3, 1.0));
     objects_list.push(box_object);
@@ -215,7 +215,7 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
     let mut lamp_mesh = BasicMesh::cube(1.0);
     let mut lamp_texture = Texture2D::new(TextureType::Diffuse);
     lamp_texture.load(Path::new(LAMP_TEXTURE));
-    lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 1.0);
+    lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 32.0);
     let mut lamp_object = SceneObject::from(lamp_mesh.clone());
     lamp_object.get_instance_mut(0).translate(&lamps[0].pos);
     lamp_object.get_instance_mut(0).scale(&vec3(0.1, 0.1, 0.1));

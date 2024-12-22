@@ -54,10 +54,11 @@ impl Texture2D {
                 4 => GL_RGBA,
                 _ => GL_RGB,
             };
+            let i_format = self.get_internal_format();
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                GL_RGBA.0 as i32,
+                i_format.0 as i32,
                 width,
                 height,
                 0,
@@ -150,6 +151,20 @@ impl Texture2D {
     pub fn get_type(&self) -> TextureType {
         self.ttype
     }
+    pub fn get_internal_format(&self) -> GLenum {
+        match self.ttype {
+            TextureType::Diffuse => GL_SRGB_ALPHA,
+            TextureType::Specular => GL_RGBA,
+            TextureType::Attachment => GL_RGBA,
+        }
+    }
+
+    pub fn setup_new(ttype: TextureType, path: &Path, wrapping: GLenum) -> Self {
+        let mut tex = Texture2D::new(ttype);
+        tex.load(&Path::new(path));
+        tex.set_wrapping(wrapping);
+        return tex;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -189,7 +204,7 @@ impl CubeMap {
                 glTexImage2D(
                     GLenum(GL_TEXTURE_CUBE_MAP_POSITIVE_X.0 + i as u32),
                     0,
-                    GL_RGB.0 as i32,
+                    GL_SRGB.0 as i32,
                     width,
                     height,
                     0,

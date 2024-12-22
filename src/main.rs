@@ -74,7 +74,8 @@ const CONTAINER_SPECULAR: &str = "./src/resources/textures/container2_specular.p
 const FACE_TEXTURE: &str = "./src/resources/textures/awesomeface.png";
 const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
 const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
-const WINDOW_TEXTURE: &str = "./src/resources/textures/blending_transparent_window.png";
+const WINDOW_TEXTURE: &str = "./src/resources/textures/window_diff.png";
+const WINDOW_SPECULAR: &str = "./src/resources/textures/window_spec.png";
 
 const ABSTRACT_CUBE: &str = "./src/resources/models/cube/untitled.obj";
 const ROCK_1: &str = "./src/resources/models/rocks/rock.obj";
@@ -201,20 +202,45 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
     objects_list.push(rock_object);
 
     let mut box_mesh = BasicMesh::cube(1.0);
-    let mut cont_tex = Texture2D::new(TextureType::Diffuse);
-    cont_tex.load(&Path::new(CONTAINER_TEXTURE));
-    cont_tex.set_wrapping(GL_CLAMP_TO_EDGE);
-    let mut cont_spec = Texture2D::new(TextureType::Specular);
-    cont_spec.load(&Path::new(CONTAINER_SPECULAR));
-    cont_spec.set_wrapping(GL_CLAMP_TO_EDGE);
+    let cont_tex = Texture2D::setup_new(
+        TextureType::Diffuse,
+        &Path::new(CONTAINER_TEXTURE),
+        GL_CLAMP_TO_EDGE,
+    );
+    let cont_spec = Texture2D::setup_new(
+        TextureType::Specular,
+        &Path::new(CONTAINER_SPECULAR),
+        GL_CLAMP_TO_EDGE,
+    );
     box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 32.0);
     let mut box_object = SceneObject::from(box_mesh);
     box_object.set_outline(vec4(0.5, 0.2, 0.3, 1.0));
     objects_list.push(box_object);
 
+    let mut wind_mesh = BasicMesh::square(1.0);
+    let wind_tex = Texture2D::setup_new(
+        TextureType::Diffuse,
+        &Path::new(WINDOW_TEXTURE),
+        GL_CLAMP_TO_EDGE,
+    );
+    let wind_spec = Texture2D::setup_new(
+        TextureType::Specular,
+        &Path::new(WINDOW_SPECULAR),
+        GL_CLAMP_TO_EDGE,
+    );
+    wind_mesh.material = Material::new(vec![wind_tex], vec![wind_spec], 32.0);
+    let mut wind_object = SceneObject::from(wind_mesh);
+    wind_object
+        .get_instance_mut(0)
+        .translate(&vec3(0.0, 0.0, -2.5));
+    objects_list.push(wind_object);
+
     let mut lamp_mesh = BasicMesh::cube(1.0);
-    let mut lamp_texture = Texture2D::new(TextureType::Diffuse);
-    lamp_texture.load(Path::new(LAMP_TEXTURE));
+    let mut lamp_texture = Texture2D::setup_new(
+        TextureType::Diffuse,
+        &Path::new(LAMP_TEXTURE),
+        GL_CLAMP_TO_EDGE,
+    );
     lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 32.0);
     let mut lamp_object = SceneObject::from(lamp_mesh.clone());
     lamp_object.get_instance_mut(0).translate(&lamps[0].pos);

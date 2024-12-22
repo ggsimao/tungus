@@ -8,12 +8,15 @@ use crate::meshes::{BasicMesh, Draw};
 use crate::scene::{Scene, SceneObject};
 use crate::shaders::ShaderProgram;
 use crate::spatial::Spatial;
+use crate::utils::constrained_step;
 use beryllium::Keycode;
 use gl33::gl_core_types::*;
 use gl33::gl_enumerations::*;
 use gl33::gl_groups::*;
 use gl33::global_loader::*;
 use nalgebra_glm::*;
+
+const GAMMA: f32 = 2.2;
 
 pub struct Screen {
     canvas: SceneObject,
@@ -22,6 +25,7 @@ pub struct Screen {
     shader: ShaderProgram,
     sobel_on: bool,
     msaa_on: bool,
+    gamma: f32,
     ubo: UniformBuffer,
     window_size: (u32, u32),
 }
@@ -43,6 +47,7 @@ impl<'a> Screen {
             shader,
             sobel_on: false,
             msaa_on: false,
+            gamma: GAMMA,
             ubo,
             window_size,
         }
@@ -93,6 +98,7 @@ impl<'a> Screen {
         }
 
         self.shader.use_program();
+        self.shader.set_1f("gamma", 1.0);
         self.shader
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.ubo.set_model_mat(&transformed_canvas.get_model());
@@ -110,6 +116,7 @@ impl<'a> Screen {
         }
 
         self.shader.use_program();
+        self.shader.set_1f("gamma", self.gamma);
         self.shader
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.shader
@@ -124,6 +131,7 @@ impl<'a> Screen {
 pub struct ScreenController {
     sobel_on: bool,
     msaa_on: bool,
+    gamma: f32,
 }
 
 impl ScreenController {
@@ -131,12 +139,15 @@ impl ScreenController {
         Rc::new(RefCell::new(Self {
             sobel_on: false,
             msaa_on: true,
+            gamma: GAMMA,
         }))
     }
     pub fn on_key_pressed(&mut self, keycode: Keycode) {
         match keycode {
             Keycode::E => self.sobel_on = !self.sobel_on,
             Keycode::M => self.msaa_on = !self.msaa_on,
+            Keycode::EQUALS => self.gamma = (self.gamma + 0.2).min(3.0),
+            Keycode::MINUS => self.gamma = (self.gamma - 0.2).max(1.0),
             _ => (),
         }
     }
@@ -159,5 +170,6 @@ impl<'a> Controller<'a, Screen, ScreenController> for Rc<RefCell<ScreenControlle
         let self_obj = (**self).borrow();
         obj.sobel_on = self_obj.sobel_on;
         obj.msaa_on = self_obj.msaa_on;
+        obj.gamma = self_obj.gamma;
     }
 }

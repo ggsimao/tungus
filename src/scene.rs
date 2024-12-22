@@ -319,6 +319,15 @@ impl<'a> Scene<'a> {
         self.set_lighting_uniforms();
         let object_list: &mut Vec<SceneObject> = self.objects.borrow_mut();
         for object in object_list.iter_mut() {
+            if object.drawable.cull_faces() {
+                unsafe {
+                    glEnable(GL_CULL_FACE);
+                }
+            } else {
+                unsafe {
+                    glDisable(GL_CULL_FACE);
+                }
+            }
             ubo.set_model_mat(&object.get_model());
             object.draw(&self.object_shader);
             if self.params.visualize_normals {

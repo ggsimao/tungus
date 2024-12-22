@@ -21,6 +21,9 @@ pub trait Draw {
     fn clone_box(&self) -> Box<dyn Draw>;
     fn instanced_draw(&self, shader: &ShaderProgram, instances: usize);
     fn setup_inst_attr(&self);
+    fn cull_faces(&self) -> bool {
+        false
+    }
 }
 
 impl Clone for Box<dyn Draw> {
@@ -70,6 +73,7 @@ pub struct BasicMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub material: Material,
+    cull_faces: bool,
     vao: VertexArray,
     vbo: Buffer,
     ebo: Buffer,
@@ -85,6 +89,7 @@ impl BasicMesh {
             vertices,
             indices,
             material,
+            cull_faces: true,
             vao,
             vbo,
             ebo,
@@ -158,6 +163,7 @@ impl BasicMesh {
             vertices,
             indices,
             material: Material::new(vec![], vec![], 1.0),
+            cull_faces: true,
             vao,
             vbo,
             ebo,
@@ -194,6 +200,7 @@ impl BasicMesh {
             vertices,
             indices,
             material: Material::new(vec![], vec![], 1.0),
+            cull_faces: false,
             vao,
             vbo,
             ebo,
@@ -313,6 +320,9 @@ impl Draw for BasicMesh {
             }
         }
         VertexArray::clear_binding();
+    }
+    fn cull_faces(&self) -> bool {
+        self.cull_faces
     }
 }
 

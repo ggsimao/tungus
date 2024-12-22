@@ -1,5 +1,6 @@
 use beryllium::Keycode;
 use rand::Rng;
+use std::ops::{Add, Rem, Sub};
 use std::rc::Rc;
 use std::{cell::RefCell, fs};
 
@@ -133,4 +134,13 @@ impl<'a> Controller<'a, Vec<RandomTransform>, RTController> for Rc<RefCell<RTCon
             }
         }
     }
+}
+
+pub fn constrained_step<T: Sub<Output = T> + Rem<Output = T> + Add<Output = T> + Copy>(
+    curr_value: T,
+    min: T,
+    step: T,
+    modulus: T,
+) -> T {
+    (curr_value - min + (step % modulus) + modulus) % modulus + min
 }

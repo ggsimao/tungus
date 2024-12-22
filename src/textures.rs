@@ -150,6 +150,13 @@ impl Texture2D {
     pub fn get_type(&self) -> TextureType {
         self.ttype
     }
+
+    pub fn setup_new(ttype: TextureType, path: &Path, wrapping: GLenum) -> Self {
+        let mut tex = Texture2D::new(ttype);
+        tex.load(&Path::new(path));
+        tex.set_wrapping(wrapping);
+        return tex;
+    }
 }
 
 #[derive(Clone, Debug)]

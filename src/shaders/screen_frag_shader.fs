@@ -6,6 +6,7 @@ out vec4 fragColor;
 uniform sampler2DMS screenTexture;
 uniform int sampleCount;
 uniform bool applySobel, applyMSAA;
+uniform float gamma;
 
 const float offset = 1.0 / 600.0;
 
@@ -45,4 +46,5 @@ void main() {
         ivec2 texelCoords = ivec2(texCoords * textureSize(screenTexture));
         fragColor = texelFetch(screenTexture, texelCoords, 0);
     }
+    fragColor.rgb = pow(fragColor.rgb, vec3(1.0/gamma));
 }

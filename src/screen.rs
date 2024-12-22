@@ -146,8 +146,8 @@ impl ScreenController {
         match keycode {
             Keycode::E => self.sobel_on = !self.sobel_on,
             Keycode::M => self.msaa_on = !self.msaa_on,
-            Keycode::EQUALS => self.gamma = constrained_step(self.gamma, 1.0, 0.2, 2.0),
-            Keycode::MINUS => self.gamma = constrained_step(self.gamma, 1.0, -0.2, 2.0),
+            Keycode::EQUALS => self.gamma = (self.gamma + 0.2).min(3.0),
+            Keycode::MINUS => self.gamma = (self.gamma - 0.2).max(1.0),
             _ => (),
         }
     }

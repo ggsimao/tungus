@@ -95,8 +95,10 @@ pub enum ShaderType {
     FragmentShader = GL_FRAGMENT_SHADER.0 as isize,
 }
 
+static mut TEX_COUNT: u32 = 0;
+
 #[derive(Clone, Copy)]
-pub struct ShaderProgram(pub u32);
+pub struct ShaderProgram(u32);
 impl ShaderProgram {
     pub fn new() -> Option<Self> {
         let prog = glCreateProgram();
@@ -104,6 +106,25 @@ impl ShaderProgram {
             Some(Self(prog))
         } else {
             None
+        }
+    }
+
+    #[inline]
+    pub fn tex_count() -> u32 {
+        unsafe { TEX_COUNT }
+    }
+
+    #[inline]
+    pub fn increment_tex_count() -> () {
+        unsafe {
+            TEX_COUNT += 1;
+        }
+    }
+
+    #[inline]
+    pub fn reset_tex_count() -> () {
+        unsafe {
+            TEX_COUNT = 0;
         }
     }
 
@@ -196,6 +217,9 @@ impl ShaderProgram {
         unsafe {
             location = glGetUniformLocation(self.0, uniform_name);
         }
+        // if location == -1 {
+        //     println!("Uniform {} not found for shader program {}", name, self.0);
+        // }
         location
     }
 
@@ -230,80 +254,76 @@ impl ShaderProgram {
     #[allow(non_snake_case)]
     pub fn set_texture2D(&self, texture_name: &str, value: &Texture2D) {
         unsafe {
-            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+            glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
         }
         value.bind();
-        self.set_1i(texture_name, 0 as i32);
-        // unsafe {
-        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
-        // }
+        self.set_1i(texture_name, Self::tex_count() as i32);
+        Self::increment_tex_count();
     }
     #[allow(non_snake_case)]
     pub fn set_texture2D_multisample(&self, texture_name: &str, value: &Texture2DMultisample) {
         unsafe {
-            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+            glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
         }
         value.bind();
-        self.set_1i(texture_name, 0 as i32);
-        // unsafe {
-        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
-        // }
+        self.set_1i(texture_name, Self::tex_count() as i32);
+        Self::increment_tex_count();
     }
     pub fn set_cubemap(&self, texture_name: &str, value: &CubeMap) {
         unsafe {
-            glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
+            glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
         }
         value.bind();
-        self.set_1i(texture_name, 0 as i32);
-        // unsafe {
-        //     glActiveTexture(GLenum(GL_TEXTURE0.0 as u32));
-        // }
+        self.set_1i(texture_name, Self::tex_count() as i32);
+        Self::increment_tex_count();
     }
     pub fn set_material(&self, material_name: &str, value: &Material) {
         let diffuse_vector = value.get_diffuse_maps();
         let specular_vector = value.get_specular_maps();
         let loaded_diffuse = diffuse_vector.len().max(1) as i32;
         let loaded_specular = specular_vector.len().max(1) as i32;
-        let mut tex_count = 0;
 
-        for (i, diffuse) in diffuse_vector.iter().enumerate() {
-            unsafe {
-                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
-            }
-            diffuse.bind();
-            let name = format!("{}.diffuseTextures[{}]", material_name, i);
-            self.set_1i(&name, tex_count as i32);
-            tex_count += 1;
-        }
-        for (i, specular) in specular_vector.iter().enumerate() {
-            unsafe {
-                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
-            }
-            specular.bind();
-            let name = format!("{}.specularTextures[{}]", material_name, i);
-            self.set_1i(&name, tex_count as i32);
-            tex_count += 1;
-        }
         if diffuse_vector.len() == 0 {
             unsafe {
-                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
             }
             let diff = Texture2D::new(crate::textures::TextureType::Diffuse);
             diff.empty_texture();
             diff.bind();
             let name = format!("{}.diffuseTextures[0]", material_name);
-            self.set_1i(&name, tex_count as i32);
-            tex_count += 1;
+            self.set_1i(&name, Self::tex_count() as i32);
+            Self::increment_tex_count();
+        } else {
+            for (i, diffuse) in diffuse_vector.iter().enumerate() {
+                unsafe {
+                    glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
+                }
+                diffuse.bind();
+                let name = format!("{}.diffuseTextures[{}]", material_name, i);
+                self.set_1i(&name, Self::tex_count() as i32);
+                Self::increment_tex_count();
+            }
         }
         if specular_vector.len() == 0 {
             unsafe {
-                glActiveTexture(GLenum(GL_TEXTURE0.0 + tex_count as u32));
+                glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
             }
             let spec = Texture2D::new(crate::textures::TextureType::Specular);
             spec.empty_texture();
             spec.bind();
             let name = format!("{}.specularTextures[0]", material_name);
-            self.set_1i(&name, tex_count as i32);
+            self.set_1i(&name, Self::tex_count() as i32);
+            Self::increment_tex_count();
+        } else {
+            for (i, specular) in specular_vector.iter().enumerate() {
+                unsafe {
+                    glActiveTexture(GLenum(GL_TEXTURE0.0 + Self::tex_count()));
+                }
+                specular.bind();
+                let name = format!("{}.specularTextures[{}]", material_name, i);
+                self.set_1i(&name, Self::tex_count() as i32);
+                Self::increment_tex_count();
+            }
         }
 
         self.set_1f(

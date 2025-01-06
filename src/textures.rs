@@ -145,6 +145,12 @@ impl Texture2D {
         }
     }
 
+    pub fn set_border_color(&self, color: &Vec4) {
+        unsafe {
+            glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, color.as_ptr());
+        }
+    }
+
     pub fn get_id(&self) -> u32 {
         self.id
     }

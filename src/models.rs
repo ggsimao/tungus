@@ -4,6 +4,7 @@ use russimp::mesh;
 use russimp::node::Node;
 use russimp::scene::{PostProcess, Scene};
 use russimp::Vector3D;
+use std::any::Any;
 use std::ops::Deref;
 use std::{
     path::{Path, PathBuf},
@@ -120,11 +121,11 @@ impl Model {
         for property in &mat.properties {
             if property.key == "$mat.shininess" {
                 if let material::PropertyTypeInfo::FloatArray(data_float) = &property.data {
-                    return data_float[0];
+                    return data_float[0] / 255.0;
                 }
             }
         }
-        0.0
+        1.0
     }
     fn load_material_color(&mut self, mat: &material::Material, typename: TextureType) -> Vec3 {
         let key_name = match typename {

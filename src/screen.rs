@@ -1,9 +1,12 @@
+use std::alloc::{alloc, Layout};
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::path::Path;
+use std::ptr::null_mut;
 use std::rc::Rc;
 
 use crate::controls::{Controller, SignalType, Slot};
-use crate::data::{Framebuffer, UniformBuffer};
+use crate::data::{Framebuffer, ShadowFramebuffer, UniformBuffer};
 use crate::meshes::{BasicMesh, Draw};
 use crate::scene::{Scene, SceneObject};
 use crate::shaders::ShaderProgram;
@@ -18,16 +21,23 @@ use nalgebra_glm::*;
 
 const GAMMA: f32 = 2.2;
 
+const SHADOW_RESOLUTION: (u32, u32) = (1024, 1024);
+
+struct ScreenParameters {
+    clear_color: Vec4,
+    pub sobel_on: bool,
+    pub msaa_on: bool,
+    pub gamma: f32,
+    pub window_size: (u32, u32),
+}
+
 pub struct Screen {
     canvas: SceneObject,
-    clear_color: Vec4,
     fbo: Framebuffer,
+    sfbo: ShadowFramebuffer,
     shader: ShaderProgram,
-    sobel_on: bool,
-    msaa_on: bool,
-    gamma: f32,
     ubo: UniformBuffer,
-    window_size: (u32, u32),
+    params: ScreenParameters,
 }
 
 impl<'a> Screen {
@@ -38,54 +48,68 @@ impl<'a> Screen {
         shader: ShaderProgram,
         ubo: UniformBuffer,
     ) -> Self {
-        let fbo = Framebuffer::new().unwrap();
-        fbo.setup_with_renderbuffer(window_size);
-        Self {
-            canvas,
+        let fbo = Framebuffer::new(window_size).unwrap();
+        fbo.setup();
+        let sfbo = ShadowFramebuffer::new(SHADOW_RESOLUTION).unwrap();
+        sfbo.setup();
+        let params = ScreenParameters {
             clear_color,
-            fbo,
-            shader,
             sobel_on: false,
             msaa_on: false,
             gamma: GAMMA,
-            ubo,
             window_size,
-        }
-    }
-    pub fn clear_color(&self) {
-        unsafe {
-            glClearColor(
-                self.clear_color.x,
-                self.clear_color.y,
-                self.clear_color.z,
-                self.clear_color.w,
-            );
+        };
+
+        Self {
+            canvas,
+            fbo,
+            sfbo,
+            shader,
+            ubo,
+            params,
         }
     }
 
     pub fn clear_buffers(&self) {
         // TODO: maybe make more generic
         unsafe {
+            glClearColor(
+                self.params.clear_color.x,
+                self.params.clear_color.y,
+                self.params.clear_color.z,
+                self.params.clear_color.w,
+            );
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         }
     }
 
     pub fn draw_on_framebuffer(&mut self, scene: &mut Scene) {
+        ShaderProgram::reset_tex_count();
+        self.generate_shadow_maps(scene);
         self.fbo.bind();
-        self.clear_color();
         self.clear_buffers();
-        unsafe {
-            glEnable(GL_DEPTH_TEST);
-        }
         scene.compose(&self.ubo);
         Framebuffer::clear_binding();
     }
 
-    pub fn bind(&self) {
-        self.fbo.bind();
+    fn generate_shadow_maps(&self, scene: &mut Scene) {
+        self.sfbo.bind();
+
+        let mut m_viewport = [0; 4];
+        unsafe {
+            glGetIntegerv(GL_VIEWPORT, m_viewport.as_mut_ptr());
+        }
+
+        self.clear_buffers();
+        scene.set_shadow_maps(&self.ubo, &self.sfbo);
+        unsafe {
+            glViewport(m_viewport[0], m_viewport[1], m_viewport[2], m_viewport[3]);
+        }
+
+        ShadowFramebuffer::clear_binding();
     }
 
-    pub fn draw_on_another(&self, other: &Screen, scaling: f32, offset: Vec2) {
+    pub fn draw_on_another(&mut self, other: &Screen, scaling: f32, offset: Vec2) {
         other.fbo.bind();
         self.ubo.bind_base();
 
@@ -97,15 +121,20 @@ impl<'a> Screen {
             glDisable(GL_DEPTH_TEST);
         }
 
+        ShaderProgram::reset_tex_count();
         self.shader.use_program();
         self.shader.set_1f("gamma", 1.0);
         self.shader
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.ubo.set_model_mat(&transformed_canvas.get_model());
         transformed_canvas.draw(&self.shader);
+
+        unsafe {
+            glEnable(GL_DEPTH_TEST);
+        }
     }
 
-    pub fn draw_on_screen(&self) {
+    pub fn draw_on_screen(&mut self) {
         Framebuffer::clear_binding();
         self.ubo.bind_base();
 
@@ -115,16 +144,21 @@ impl<'a> Screen {
             glDisable(GL_DEPTH_TEST);
         }
 
+        ShaderProgram::reset_tex_count();
         self.shader.use_program();
-        self.shader.set_1f("gamma", self.gamma);
+        self.shader.set_1f("gamma", self.params.gamma);
         self.shader
             .set_texture2D_multisample("screenTexture", self.fbo.get_texture());
         self.shader
             .set_1i("sampleCount", self.fbo.get_texture().get_samples() as i32);
-        self.shader.set_1b("applySobel", self.sobel_on);
-        self.shader.set_1b("applyMSAA", self.msaa_on);
+        self.shader.set_1b("applySobel", self.params.sobel_on);
+        self.shader.set_1b("applyMSAA", self.params.msaa_on);
         self.ubo.set_model_mat(&identity());
         self.canvas.draw(&self.shader);
+
+        unsafe {
+            glEnable(GL_DEPTH_TEST);
+        }
     }
 }
 
@@ -168,8 +202,8 @@ impl<'a> Controller<'a, Screen, ScreenController> for Rc<RefCell<ScreenControlle
     }
     fn process_signals(&'a self, obj: &mut Screen) {
         let self_obj = (**self).borrow();
-        obj.sobel_on = self_obj.sobel_on;
-        obj.msaa_on = self_obj.msaa_on;
-        obj.gamma = self_obj.gamma;
+        obj.params.sobel_on = self_obj.sobel_on;
+        obj.params.msaa_on = self_obj.msaa_on;
+        obj.params.gamma = self_obj.gamma;
     }
 }

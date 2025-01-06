@@ -21,9 +21,6 @@ pub trait Draw {
     fn clone_box(&self) -> Box<dyn Draw>;
     fn instanced_draw(&self, shader: &ShaderProgram, instances: usize);
     fn setup_inst_attr(&self);
-    fn cull_faces(&self) -> bool {
-        false
-    }
 }
 
 impl Clone for Box<dyn Draw> {
@@ -73,7 +70,6 @@ pub struct BasicMesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub material: Material,
-    cull_faces: bool,
     vao: VertexArray,
     vbo: Buffer,
     ebo: Buffer,
@@ -89,7 +85,6 @@ impl BasicMesh {
             vertices,
             indices,
             material,
-            cull_faces: true,
             vao,
             vbo,
             ebo,
@@ -163,7 +158,6 @@ impl BasicMesh {
             vertices,
             indices,
             material: Material::new(vec![], vec![], 1.0),
-            cull_faces: true,
             vao,
             vbo,
             ebo,
@@ -178,29 +172,42 @@ impl BasicMesh {
         let ebo = Buffer::new().expect("Couldn't make the indices buffer");
 
         let mut vertices = vec![
+            // Front face
+            Vertex::new(-side / 2.0, side / 2.0, 0.0),
+            Vertex::new(side / 2.0, side / 2.0, 0.0),
+            Vertex::new(-side / 2.0, -side / 2.0, 0.0),
+            Vertex::new(side / 2.0, -side / 2.0, 0.0),
+            // Back face
             Vertex::new(-side / 2.0, side / 2.0, 0.0),
             Vertex::new(side / 2.0, side / 2.0, 0.0),
             Vertex::new(-side / 2.0, -side / 2.0, 0.0),
             Vertex::new(side / 2.0, -side / 2.0, 0.0),
         ];
-        let indices = vec![0, 2, 1, 1, 2, 3];
+        let indices = vec![
+            // Front face
+            0, 2, 1, 1, 2, 3,
+            // Back face (winding order should be reversed to face opposite direction)
+            4, 5, 6, 5, 7, 6,
+        ];
 
-        let main_vertex = vertices[indices[0] as usize];
-        let v1 = vertices[indices[1] as usize];
-        let v2 = vertices[indices[2] as usize];
-        let normal = normalize(&cross(
-            &(v1.pos - main_vertex.pos),
-            &(v2.pos - main_vertex.pos),
-        ));
-        for i in 0..4 {
-            vertices[i].normal = normal;
-            vertices[i].tex_coords = vec3((i % 2) as f32, (i as i32 / -2 + 1) as f32, 0.0);
+        for i in 0..2 {
+            let main_vertex = vertices[indices[0 + 6 * i] as usize];
+            let v1 = vertices[indices[1 + 6 * i] as usize];
+            let v2 = vertices[indices[2 + 6 * i] as usize];
+            let normal = normalize(&cross(
+                &(v1.pos - main_vertex.pos),
+                &(v2.pos - main_vertex.pos),
+            ));
+            for j in 0..4 {
+                vertices[j + 4 * i].normal = normal;
+                vertices[j + 4 * i].tex_coords =
+                    vec3((j % 2) as f32, (j as i32 / -2 + 1) as f32, 0.0);
+            }
         }
         let square = BasicMesh {
             vertices,
             indices,
             material: Material::new(vec![], vec![], 1.0),
-            cull_faces: false,
             vao,
             vbo,
             ebo,
@@ -320,9 +327,6 @@ impl Draw for BasicMesh {
             }
         }
         VertexArray::clear_binding();
-    }
-    fn cull_faces(&self) -> bool {
-        self.cull_faces
     }
 }
 

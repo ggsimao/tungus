@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use crate::camera::Camera;
 use crate::controls::{Controller, SignalType, Slot};
-use crate::data::{buffer_data, Buffer, BufferType, UniformBuffer, VertexArray};
+use crate::data::{buffer_data, Buffer, BufferType, ShadowFramebuffer, UniformBuffer, VertexArray};
 use crate::lighting::Lighting;
 use crate::meshes::{BasicMesh, Draw, Skybox, Vertex};
 use crate::models::Model;
@@ -267,6 +267,7 @@ pub struct Scene<'a> {
     pub object_shader: ShaderProgram,
     pub skybox_shader: ShaderProgram,
     pub outline_shader: ShaderProgram,
+    pub shadow_shader: ShaderProgram,
     pub debug_shader: ShaderProgram,
     pub camera: Camera,
     pub lighting: &'a Lighting,
@@ -281,6 +282,7 @@ impl<'a> Scene<'a> {
             object_shader: self.object_shader,
             skybox_shader: self.skybox_shader,
             outline_shader: self.outline_shader,
+            shadow_shader: self.shadow_shader,
             debug_shader: self.debug_shader,
             camera: self.camera.invert(),
             lighting: &self.lighting,
@@ -288,46 +290,34 @@ impl<'a> Scene<'a> {
         }
     }
     pub fn compose(&mut self, ubo: &UniformBuffer) {
-        unsafe {
-            glDisable(GL_STENCIL_TEST);
-            glDisable(GL_CULL_FACE);
-            glDepthFunc(GL_LEQUAL);
-        }
-
-        let view = mat3_to_mat4(&mat4_to_mat3(&self.camera.look_at()));
-        ubo.set_view_mat(&view);
-
-        self.skybox_shader.use_program();
-
-        for skybox in self.skyboxes {
-            skybox.draw(&self.skybox_shader);
-        }
-
-        unsafe {
-            glEnable(GL_STENCIL_TEST);
-            glEnable(GL_CULL_FACE);
-            glDepthFunc(GL_LESS);
-        }
-
         let projection = perspective(1.0, self.camera.get_fov(), 0.1, 100.0);
-        let view = self.camera.look_at();
-
-        ubo.set_view_mat(&view);
         ubo.set_projection_mat(&projection);
+
+        let skybox_view = mat3_to_mat4(&mat4_to_mat3(&self.camera.look_at()));
+        ubo.set_view_mat(&skybox_view);
+        self.skybox_shader.use_program();
+        self.draw_skybox();
+
+        let view = self.camera.look_at();
+        ubo.set_view_mat(&view);
 
         self.object_shader.use_program();
         self.set_lighting_uniforms();
-        let object_list: &mut Vec<SceneObject> = self.objects.borrow_mut();
-        for object in object_list.iter_mut() {
-            if object.drawable.cull_faces() {
-                unsafe {
-                    glEnable(GL_CULL_FACE);
-                }
-            } else {
-                unsafe {
-                    glDisable(GL_CULL_FACE);
-                }
-            }
+        self.object_shader.set_3f("viewPos", &self.camera.get_pos());
+
+        self.draw_objects(ubo);
+    }
+
+    fn draw_objects(&mut self, ubo: &UniformBuffer) {
+        let distance_compare = |a: &SceneObject, b: &SceneObject| {
+            let a_pos = a.get_model().column(3).xyz();
+            let b_pos = b.get_model().column(3).xyz();
+            let distance_a = length(&(self.camera.get_pos() - a_pos));
+            let distance_b = length(&(self.camera.get_pos() - b_pos));
+            distance_b.partial_cmp(&distance_a).unwrap()
+        };
+        self.objects.sort_by(distance_compare);
+        for object in &self.objects {
             ubo.set_model_mat(&object.get_model());
             object.draw(&self.object_shader);
             if self.params.visualize_normals {
@@ -339,17 +329,93 @@ impl<'a> Scene<'a> {
                 self.outline_shader.use_program();
                 let outline_scale = scale(&object.get_model(), &vec3(1.1, 1.1, 1.1));
                 ubo.set_model_mat(&outline_scale);
-                object.draw_outline(&self.outline_shader, object.drawable.as_ref());
+                object.draw_outline(self.outline_shader.borrow_mut(), object.drawable.as_ref());
                 self.object_shader.use_program();
             }
         }
     }
 
-    // fn distance_compare(&self, a: &SceneObject, b: &SceneObject) -> Ordering {
-    //     let distance_a = length(&(self.camera.get_pos() - a.get_pos()));
-    //     let distance_b = length(&(self.camera.get_pos() - b.get_pos()));
-    //     distance_b.partial_cmp(&distance_a).unwrap()
-    // }
+    fn draw_skybox(&mut self) {
+        unsafe {
+            glDisable(GL_STENCIL_TEST);
+            glDisable(GL_CULL_FACE);
+            glDepthFunc(GL_LEQUAL);
+        }
+
+        for skybox in self.skyboxes {
+            skybox.draw(&self.skybox_shader);
+        }
+
+        unsafe {
+            glEnable(GL_STENCIL_TEST);
+            glEnable(GL_CULL_FACE);
+            glDepthFunc(GL_LESS);
+        }
+    }
+
+    pub fn set_shadow_maps(&mut self, ubo: &UniformBuffer, sfbo: &ShadowFramebuffer) {
+        unsafe {
+            glViewport(
+                0,
+                0,
+                sfbo.get_window_size().0 as i32,
+                sfbo.get_window_size().1 as i32,
+            );
+            glCullFace(GL_FRONT);
+        }
+        // directional
+        // unsafe {
+        //     glClear(GL_DEPTH_BUFFER_BIT);
+        // }
+        let (near_plane, far_plane): (f32, f32) = (-2.0, 10.0);
+        let dir_projection = ortho(-10.0, 10.0, -10.0, 10.0, near_plane, far_plane);
+        let directional_pos = -self.lighting.dir.dir;
+        let dir_view = look_at(&directional_pos, &Vec3::zeros(), &vec3(0.0, 1.0, 0.0));
+        self.set_shadow_map("dirLight", &dir_projection, &dir_view, ubo, sfbo);
+
+        // spotlight
+        // unsafe {
+        //     glClear(GL_DEPTH_BUFFER_BIT);
+        // }
+        // let spot_projection =
+        //     perspective(1.0, self.lighting.spot.phi.to_radians() / 2.0, 0.1, 100.0);
+        // let spot_pos = self.lighting.spot.pos;
+        // let spot_dir = self.lighting.spot.pos + self.lighting.spot.dir;
+        // let spot_view = look_at(&spot_pos, &spot_dir, &vec3(0.0, 1.0, 0.0));
+        // self.set_shadow_map("spotlight", &spot_projection, &spot_view, ubo, sfbo);
+
+        unsafe {
+            glCullFace(GL_BACK);
+        }
+    }
+
+    fn set_shadow_map(
+        &mut self,
+        light_name: &str,
+        projection: &Mat4,
+        view: &Mat4,
+        ubo: &UniformBuffer,
+        sfbo: &ShadowFramebuffer,
+    ) {
+        ubo.set_projection_mat(&projection);
+        ubo.set_view_mat(&view);
+
+        self.shadow_shader.use_program();
+        self.draw_shadows(ubo);
+
+        self.object_shader.use_program();
+        self.object_shader
+            .set_matrix_4fv(&format!("{}SpaceMatrix", light_name), &(projection * view));
+        self.object_shader
+            .set_texture2D(&format!("{}.shadow_map", light_name), sfbo.get_texture());
+    }
+
+    fn draw_shadows(&mut self, ubo: &UniformBuffer) {
+        for object in &self.objects {
+            ubo.set_model_mat(&object.get_model());
+            object.draw(&self.shadow_shader);
+        }
+    }
 
     fn set_lighting_uniforms(&self) {
         self.object_shader

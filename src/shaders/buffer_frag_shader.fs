@@ -3,7 +3,9 @@ in VERTEX {
     vec3 pos;
     vec3 normal;
     vec2 texCoords;
-} fs_in;
+    vec4 dirLightSpaceFragPos;
+}
+fs_in;
 
 out vec4 fragColor;
 
@@ -24,7 +26,8 @@ uniform vec3 outlineColor;
 void main() {
     float texture_alpha = 0.0;
     for (int i = 0; i < material.loadedDiffuse; i++) {
-        texture_alpha = max(texture_alpha, texture(material . Diffuse[i], fs_in.texCoords).a);
+        texture_alpha =
+            max(texture_alpha, texture(material.Diffuse[i], fs_in.texCoords).a);
     }
 
     if (texture_alpha == 0) {

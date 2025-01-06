@@ -97,10 +97,11 @@ pub struct Framebuffer {
     id: u32,
     texture: Texture2DMultisample,
     rbo: Renderbuffer,
+    window_size: (u32, u32),
 }
 
 impl Framebuffer {
-    pub fn new() -> Option<Self> {
+    pub fn new(window_size: (u32, u32)) -> Option<Self> {
         let mut fbo = 0;
         let texture = Texture2DMultisample::new(SAMPLES);
         let rbo = Renderbuffer::new().unwrap();
@@ -112,6 +113,7 @@ impl Framebuffer {
                 id: fbo,
                 texture,
                 rbo,
+                window_size,
             })
         } else {
             None
@@ -126,18 +128,15 @@ impl Framebuffer {
         unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }
     }
 
-    pub fn setup_with_renderbuffer(&self, window_size: (u32, u32)) {
+    pub fn setup(&self) {
         self.bind();
-        self.attach_texture(window_size);
-        self.attach_renderbuffer(window_size);
+        self.attach_texture();
+        self.attach_renderbuffer();
         Self::clear_binding();
     }
 
-    // If you want to render your whole screen to a texture of a smaller or larger size you need to
-    // call glViewport again (before rendering to your framebuffer) with the new dimensions
-    // of your texture, otherwise render commands will only fill part of the texture.
-    pub fn attach_texture(&self, window_size: (u32, u32)) {
-        self.texture.create_texture(window_size);
+    fn attach_texture(&self) {
+        self.texture.create_texture(self.window_size);
 
         unsafe {
             glFramebufferTexture2D(
@@ -150,37 +149,10 @@ impl Framebuffer {
         }
     }
 
-    pub fn attach_depth_stencil(&self, window_size: (u32, u32)) {
-        self.texture.bind();
-        unsafe {
-            glTexImage2D(
-                GL_TEXTURE_2D,
-                0,
-                GL_DEPTH24_STENCIL8.0 as i32,
-                window_size.0 as i32,
-                window_size.1 as i32,
-                0,
-                GL_DEPTH_STENCIL,
-                GL_UNSIGNED_INT_24_8,
-                null(),
-            );
-        }
-        Texture2D::clear_binding();
-        unsafe {
-            glFramebufferTexture2D(
-                GL_FRAMEBUFFER,
-                GL_DEPTH_STENCIL_ATTACHMENT,
-                GL_TEXTURE_2D,
-                self.texture.get_id(),
-                0,
-            );
-        }
-    }
-
-    pub fn attach_renderbuffer(&self, window_size: (u32, u32)) {
+    fn attach_renderbuffer(&self) {
         self.rbo.bind();
         Renderbuffer::create_depth_stencil_storage_multisample(
-            window_size,
+            self.window_size,
             self.texture.get_samples(),
         );
         Renderbuffer::clear_binding();
@@ -256,6 +228,106 @@ impl Framebuffer {
 }
 
 impl Drop for Framebuffer {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteFramebuffers(1, &self.id);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ShadowFramebuffer {
+    id: u32,
+    texture: Texture2D,
+    window_size: (u32, u32),
+}
+
+impl ShadowFramebuffer {
+    pub fn new(window_size: (u32, u32)) -> Option<Self> {
+        let mut fbo = 0;
+        let texture = Texture2D::new(TextureType::Attachment);
+        unsafe {
+            glGenFramebuffers(1, &mut fbo);
+        }
+        if fbo != 0 {
+            Some(Self {
+                id: fbo,
+                texture,
+                window_size,
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_window_size(&self) -> (u32, u32) {
+        self.window_size
+    }
+
+    pub fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn check_status() -> GLenum {
+        unsafe { glCheckFramebufferStatus(GL_FRAMEBUFFER) }
+    }
+
+    pub fn setup(&self) {
+        self.bind();
+        self.attach_depth();
+        Self::clear_binding();
+    }
+
+    pub fn attach_depth(&self) {
+        self.texture.bind();
+        unsafe {
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_DEPTH_COMPONENT.0 as i32,
+                self.window_size.0 as i32,
+                self.window_size.1 as i32,
+                0,
+                GL_DEPTH_COMPONENT,
+                GL_FLOAT,
+                null(),
+            );
+        }
+        self.texture.set_filters(GL_LINEAR, GL_LINEAR);
+        self.texture.set_wrapping(GL_CLAMP_TO_BORDER);
+        let border_color: Vec4 = vec4(1.0, 1.0, 1.0, 1.0);
+        self.texture.set_border_color(&border_color);
+        Texture2D::clear_binding();
+        unsafe {
+            glFramebufferTexture2D(
+                GL_FRAMEBUFFER,
+                GL_DEPTH_ATTACHMENT,
+                GL_TEXTURE_2D,
+                self.texture.get_id(),
+                0,
+            );
+            glDrawBuffer(GL_NONE);
+            glReadBuffer(GL_NONE);
+        }
+        if Self::check_status() != GL_FRAMEBUFFER_COMPLETE {
+            panic!("Could not attach depth texture to shadow framebuffer!");
+        }
+    }
+
+    pub fn bind(&self) {
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, self.id) }
+    }
+
+    pub fn clear_binding() {
+        unsafe { glBindFramebuffer(GL_FRAMEBUFFER, 0) }
+    }
+
+    pub fn get_texture(&self) -> &Texture2D {
+        &self.texture
+    }
+}
+
+impl Drop for ShadowFramebuffer {
     fn drop(&mut self) {
         unsafe {
             glDeleteFramebuffers(1, &self.id);

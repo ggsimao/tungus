@@ -4,6 +4,7 @@
 #![allow(clippy::zero_ptr)]
 #![feature(offset_of)]
 #![feature(div_duration)]
+#![feature(core_intrinsics)]
 
 use beryllium::*;
 use core::{
@@ -23,6 +24,7 @@ use std::{
     borrow::BorrowMut,
     cell::RefCell,
     collections::HashMap,
+    f32::consts::PI,
     ffi::c_void,
     path::Path,
     rc::{Rc, Weak},
@@ -67,6 +69,8 @@ const SCREEN_VERT_SHADER: &str = "./src/shaders/screen_vert_shader.vs";
 const SCREEN_FRAG_SHADER: &str = "./src/shaders/screen_frag_shader.fs";
 const SKYBOX_VERT_SHADER: &str = "./src/shaders/skybox_vert_shader.vs";
 const SKYBOX_FRAG_SHADER: &str = "./src/shaders/skybox_frag_shader.fs";
+const SHADOW_VERT_SHADER: &str = "./src/shaders/shadow_vert_shader.vs";
+const SHADOW_FRAG_SHADER: &str = "./src/shaders/shadow_frag_shader.fs";
 
 const WALL_TEXTURE: &str = "./src/resources/textures/wall.jpg";
 const CONTAINER_TEXTURE: &str = "./src/resources/textures/container2.png";
@@ -76,9 +80,11 @@ const GRASS_TEXTURE: &str = "./src/resources/textures/grass.png";
 const LAMP_TEXTURE: &str = "./src/resources/textures/glowstone.png";
 const WINDOW_TEXTURE: &str = "./src/resources/textures/window_diff.png";
 const WINDOW_SPECULAR: &str = "./src/resources/textures/window_spec.png";
+const WOOD_TEXTURE: &str = "./src/resources/textures/wood.jpg";
 
 const ABSTRACT_CUBE: &str = "./src/resources/models/cube/untitled.obj";
 const ROCK_1: &str = "./src/resources/models/rocks/rock.obj";
+const BACKPACK: &str = "./src/resources/models/backpack/backpack.obj";
 
 const SKYBOX_FACES: [&str; 6] = [
     "./src/resources/textures/skybox/right.jpg",
@@ -119,6 +125,10 @@ fn init_shaders() -> HashMap<&'static str, ShaderProgram> {
         "skybox",
         ShaderProgram::from_vert_frag(SKYBOX_VERT_SHADER, SKYBOX_FRAG_SHADER).unwrap(),
     );
+    shader_map.insert(
+        "shadow",
+        ShaderProgram::from_vert_frag(SHADOW_VERT_SHADER, SHADOW_FRAG_SHADER).unwrap(),
+    );
     shader_map
 }
 
@@ -157,7 +167,7 @@ fn init_lighting(camera: &Camera) -> Lighting {
     let specular = vec3(1.0, 1.0, 1.0);
     let attenuation = vec3(1.0, 0.5, 0.25);
 
-    let sun = DirectionalLight::new(vec3(0.5, -1.0, 0.5), ambient, diffuse, specular);
+    let sun = DirectionalLight::new(vec3(1.0, -2.0, 1.5), ambient, diffuse, specular);
 
     let mut lamps: [PointLight; 4] =
         [PointLight::new(vec3(0.0, 0.0, 0.0), ambient, diffuse, specular, attenuation); 4];
@@ -190,7 +200,7 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
     let rock_model = Model::new(Path::new(ROCK_1));
     let mut rock_object = SceneObject::from(rock_model);
     rock_object.scale(&vec3(0.1, 0.1, 0.1));
-    rock_object.add_instances(INSTANCES);
+    rock_object.add_instances(INSTANCES - 1);
     for i in 0..INSTANCES {
         RandomTransform::position(
             rock_object.get_instance_mut(i as isize),
@@ -212,7 +222,7 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
         &Path::new(CONTAINER_SPECULAR),
         GL_CLAMP_TO_EDGE,
     );
-    box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 32.0);
+    box_mesh.material = Material::new(vec![cont_tex], vec![cont_spec], 8.0);
     let mut box_object = SceneObject::from(box_mesh);
     box_object.set_outline(vec4(0.5, 0.2, 0.3, 1.0));
     objects_list.push(box_object);
@@ -228,11 +238,9 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
         &Path::new(WINDOW_SPECULAR),
         GL_CLAMP_TO_EDGE,
     );
-    wind_mesh.material = Material::new(vec![wind_tex], vec![wind_spec], 32.0);
+    wind_mesh.material = Material::new(vec![wind_tex], vec![wind_spec], 8.0);
     let mut wind_object = SceneObject::from(wind_mesh);
-    wind_object
-        .get_instance_mut(0)
-        .translate(&vec3(0.0, 0.0, -2.5));
+    wind_object.translate(&vec3(0.0, 1.5, -1.5));
     objects_list.push(wind_object);
 
     let mut lamp_mesh = BasicMesh::cube(1.0);
@@ -243,10 +251,10 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
     );
     lamp_mesh.material = Material::new(vec![lamp_texture], vec![], 32.0);
     let mut lamp_object = SceneObject::from(lamp_mesh.clone());
-    lamp_object.get_instance_mut(0).translate(&lamps[0].pos);
-    lamp_object.get_instance_mut(0).scale(&vec3(0.1, 0.1, 0.1));
-    lamp_object.add_instances(lamps.len() - 1);
-    for i in 1..lamps.len() {
+    if lamps.len() > 0 {
+        lamp_object.add_instances(lamps.len() - 1);
+    }
+    for i in 0..lamps.len() {
         lamp_object
             .get_instance_mut(i as isize)
             .translate(&lamps[i].pos);
@@ -255,6 +263,14 @@ fn init_obj_list(lamps: &Vec<PointLight>) -> Vec<SceneObject> {
             .scale(&vec3(0.1, 0.1, 0.1));
     }
     objects_list.push(lamp_object);
+
+    let mut floor = BasicMesh::square(10.0);
+    let floor_tex = Texture2D::setup_new(TextureType::Diffuse, &Path::new(WOOD_TEXTURE), GL_REPEAT);
+    floor.material = Material::new(vec![floor_tex], vec![], 16.0);
+    let mut floor_object = SceneObject::from(floor);
+    floor_object.rotate(-PI / 2.0, &vec3(1.0, 0.0, 0.0));
+    floor_object.translate(&vec3(0.0, -1.5, 0.0));
+    objects_list.push(floor_object);
 
     objects_list
 }
@@ -484,6 +500,7 @@ fn main() {
             object_shader: shaders["model"],
             skybox_shader: shaders["skybox"],
             outline_shader: shaders["outline"],
+            shadow_shader: shaders["shadow"],
             debug_shader: shaders["debug"],
             camera: main_camera,
             lighting: &lighting,
